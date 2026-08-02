@@ -1,0 +1,97 @@
+version: 1
+
+models:
+  fast:
+    provider: ollama
+    model: qwen3:4b
+    reasoning: minimal
+    base_url: http://127.0.1:11434
+    timeout_seconds: 45
+    temperature: 0.0
+  code:
+    provider: ollama
+    model: qwen3-coder:30b
+    reasoning: standard
+    base_url: http://127.0.1:11434
+    timeout_seconds: 120
+    temperature: 0.1
+  frontier_standard:
+    provider: external
+    model: auto
+    reasoning: standard
+  frontier_deep:
+    provider: external
+    model: auto
+    reasoning: high
+
+repository:
+  maximum_file_bytes: 524288
+  maximum_results: 20
+  excerpt_lines: 120
+  ignored_directories:
+    - .git
+    - .tgv
+    - .venv
+    - node_modules
+    - dist
+    - build
+    - vendor
+  ignored_suffixes:
+    - .png
+    - .jpg
+    - .jpeg
+    - .gif
+    - .pdf
+    - .zip
+    - .gz
+    - .lock
+
+privacy:
+  deny_patterns:
+    - "**/.env"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/credentials*"
+
+routing:
+  use_local_model: true
+  local_answer_confidence: 0.82
+  local_code_confidence: 0.68
+  maximum_tool_rounds: 6
+  force_frontier_for_high_risk: true
+  patterns:
+    high_risk:
+      security-sensitive: '\b(vulnerability|exploit|rotate (?:production )?(?:credentials|keys|secrets)|redesign (?:authentication|authorization|security)|change auth(?:entication|orization))\b'
+      architecture: '\b(redesign|re-architect|split into microservices|major migration)\b'
+      concurrency: '\b(race condition|deadlock|make .*thread[- ]?safe|concurrency bug)\b'
+      destructive: '\b(delete production|drop (?:the )?database|force push|rotate keys)\b'
+    code: '\b(fix|implement|refactor|write tests?|change|patch|debug|optimi[sz]e)\b'
+    simple: '\b(where|which file|explain|summari[sz]e|find|locate|what is)\b'
+
+# Opt-in telemetry writes only request text and routing metadata in TER-compatible
+# JSONL for `tgv efficiency` and `tgv calibrate`. It never records repository file
+# contents, excerpts, context bundles, or secrets.
+telemetry:
+  enabled: false  # Disabled by default; enable only for post-hoc efficiency analysis.
+  log_path: .tgv/sessions  # Directory containing one privacy-minimal JSONL session per interaction.
+
+# Local routing intelligence. Raw prompts are not retained by default.
+intelligence:
+  enabled: true
+  outcome_database_path: .tgv/outcomes.sqlite3
+  retain_raw_prompts: false
+  scoreboard_minimum_samples: 5
+  maximum_retrieved_files: 12
+  maximum_retrieved_symbols: 24
+  context_token_budget: 8000
+  semantic_retrieval_enabled: false
+
+# A local or self-hosted OpenAI-compatible endpoint may be used for either
+# `fast` or `code` instead of Ollama:
+# models:
+#   fast:
+#     provider: openai_compatible
+#     model: local-router
+#     base_url: http://127.0.1:8000
+#     api_key: null
+#     reasoning: minimal

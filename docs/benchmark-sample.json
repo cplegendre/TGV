@@ -1,0 +1,15 @@
+{
+  "always_frontier_tokens": 291521,
+  "estimated_cost_saved_eur": 2.0823,
+  "method": "deterministic 4-characters-per-token estimate; input-side frontier cost only",
+  "repository_tokens_estimated": 41633,
+  "requests": 7,
+  "routes": {
+    "frontier": 2,
+    "local_code": 2,
+    "local_fast": 3
+  },
+  "savings_percent": 71.43,
+  "tgv_frontier_tokens": 83294,
+  "tokens_saved": 208227
+}

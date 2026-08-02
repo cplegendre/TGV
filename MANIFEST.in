@@ -1,0 +1,8 @@
+include LICENSE NOTICE README.md CHANGELOG.md ROADMAP.md SECURITY.md CONTRIBUTING.md CODE_OF_CONDUCT.md GOVERNANCE.md
+recursive-include config *.yaml
+recursive-include docs *.md
+recursive-include examples *.txt
+recursive-include src/tgv py.typed
+
+recursive-include demo *
+recursive-include src/tgv/demo_assets *

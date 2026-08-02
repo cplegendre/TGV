@@ -1,0 +1,2252 @@
+[
+  {
+    "id": "local-fast-001",
+    "request": "Summarize the validator in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-002",
+    "request": "Summarize the validator for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-003",
+    "request": "Summarize the validator without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-004",
+    "request": "Summarize the validator and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-005",
+    "request": "Summarize the validator and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-006",
+    "request": "Summarize the parser in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-007",
+    "request": "Summarize the parser for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-008",
+    "request": "Summarize the parser without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-009",
+    "request": "Summarize the parser and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-010",
+    "request": "Summarize the parser and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-011",
+    "request": "Summarize the service in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-012",
+    "request": "Summarize the service for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-013",
+    "request": "Summarize the service without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-014",
+    "request": "Summarize the service and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-015",
+    "request": "Summarize the service and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-016",
+    "request": "Summarize the session in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-017",
+    "request": "Summarize the session for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-018",
+    "request": "Summarize the session without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-019",
+    "request": "Summarize the session and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-020",
+    "request": "Summarize the session and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-021",
+    "request": "Summarize the configuration in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-022",
+    "request": "Summarize the configuration for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-023",
+    "request": "Summarize the configuration without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-024",
+    "request": "Summarize the configuration and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-025",
+    "request": "Summarize the configuration and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-026",
+    "request": "Summarize the command-line interface in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-027",
+    "request": "Summarize the command-line interface for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-028",
+    "request": "Summarize the command-line interface without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-029",
+    "request": "Summarize the command-line interface and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-030",
+    "request": "Summarize the command-line interface and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-031",
+    "request": "Summarize the package metadata in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-032",
+    "request": "Summarize the package metadata for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-033",
+    "request": "Summarize the package metadata without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-034",
+    "request": "Summarize the package metadata and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-035",
+    "request": "Summarize the package metadata and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-036",
+    "request": "Summarize the test suite in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-037",
+    "request": "Summarize the test suite for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-038",
+    "request": "Summarize the test suite without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-039",
+    "request": "Summarize the test suite and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-040",
+    "request": "Summarize the test suite and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-041",
+    "request": "Summarize the README in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-042",
+    "request": "Summarize the README for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-043",
+    "request": "Summarize the README without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-044",
+    "request": "Summarize the README and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-045",
+    "request": "Summarize the README and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-046",
+    "request": "Summarize the repository index in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-047",
+    "request": "Summarize the repository index for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-048",
+    "request": "Summarize the repository index without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-049",
+    "request": "Summarize the repository index and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-050",
+    "request": "Summarize the repository index and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-051",
+    "request": "Summarize the telemetry recorder in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-052",
+    "request": "Summarize the telemetry recorder for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-053",
+    "request": "Summarize the telemetry recorder without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-054",
+    "request": "Summarize the telemetry recorder and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-055",
+    "request": "Summarize the telemetry recorder and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-056",
+    "request": "Summarize the report generator in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-057",
+    "request": "Summarize the report generator for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-058",
+    "request": "Summarize the report generator without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-059",
+    "request": "Summarize the report generator and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-060",
+    "request": "Summarize the report generator and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-061",
+    "request": "Explain the validator in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-062",
+    "request": "Explain the validator for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-063",
+    "request": "Explain the validator without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-064",
+    "request": "Explain the validator and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-065",
+    "request": "Explain the validator and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-066",
+    "request": "Explain the parser in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-067",
+    "request": "Explain the parser for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-068",
+    "request": "Explain the parser without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-069",
+    "request": "Explain the parser and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-070",
+    "request": "Explain the parser and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-071",
+    "request": "Explain the service in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-072",
+    "request": "Explain the service for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-073",
+    "request": "Explain the service without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-074",
+    "request": "Explain the service and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-075",
+    "request": "Explain the service and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-076",
+    "request": "Explain the session in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-077",
+    "request": "Explain the session for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-078",
+    "request": "Explain the session without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-079",
+    "request": "Explain the session and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-080",
+    "request": "Explain the session and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-081",
+    "request": "Explain the configuration in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-082",
+    "request": "Explain the configuration for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-083",
+    "request": "Explain the configuration without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-084",
+    "request": "Explain the configuration and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-085",
+    "request": "Explain the configuration and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-086",
+    "request": "Explain the command-line interface in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-087",
+    "request": "Explain the command-line interface for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-088",
+    "request": "Explain the command-line interface without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-089",
+    "request": "Explain the command-line interface and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-090",
+    "request": "Explain the command-line interface and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-091",
+    "request": "Explain the package metadata in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-092",
+    "request": "Explain the package metadata for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-093",
+    "request": "Explain the package metadata without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-094",
+    "request": "Explain the package metadata and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-095",
+    "request": "Explain the package metadata and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-096",
+    "request": "Explain the test suite in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-097",
+    "request": "Explain the test suite for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-098",
+    "request": "Explain the test suite without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-099",
+    "request": "Explain the test suite and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-100",
+    "request": "Explain the test suite and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-101",
+    "request": "Explain the README in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-102",
+    "request": "Explain the README for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-103",
+    "request": "Explain the README without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-104",
+    "request": "Explain the README and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-105",
+    "request": "Explain the README and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-106",
+    "request": "Explain the repository index in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-107",
+    "request": "Explain the repository index for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-108",
+    "request": "Explain the repository index without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-109",
+    "request": "Explain the repository index and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-110",
+    "request": "Explain the repository index and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-111",
+    "request": "Explain the telemetry recorder in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-112",
+    "request": "Explain the telemetry recorder for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-113",
+    "request": "Explain the telemetry recorder without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-114",
+    "request": "Explain the telemetry recorder and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-115",
+    "request": "Explain the telemetry recorder and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-116",
+    "request": "Explain the report generator in the synthetic repository.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-117",
+    "request": "Explain the report generator for the demo application.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-118",
+    "request": "Explain the report generator without changing any files.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-119",
+    "request": "Explain the report generator and identify its main responsibility.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-fast-120",
+    "request": "Explain the report generator and list its public helpers.",
+    "expected_route": "local_fast"
+  },
+  {
+    "id": "local-code-001",
+    "request": "Add a docstring in the validator module without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-002",
+    "request": "Add a docstring in the validator module in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-003",
+    "request": "Add a docstring in the validator module with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-004",
+    "request": "Add a docstring in the validator module while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-005",
+    "request": "Add a docstring in the validator module without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-006",
+    "request": "Add the isolated comma parsing helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-007",
+    "request": "Add the isolated comma parsing helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-008",
+    "request": "Add the isolated comma parsing helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-009",
+    "request": "Add the isolated comma parsing helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-010",
+    "request": "Add the isolated comma parsing helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-011",
+    "request": "Add a unit test for session expiration without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-012",
+    "request": "Add a unit test for session expiration in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-013",
+    "request": "Add a unit test for session expiration with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-014",
+    "request": "Add a unit test for session expiration while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-015",
+    "request": "Add a unit test for session expiration without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-016",
+    "request": "Add a small validation helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-017",
+    "request": "Add a small validation helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-018",
+    "request": "Add a small validation helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-019",
+    "request": "Add a small validation helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-020",
+    "request": "Add a small validation helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-021",
+    "request": "Add the parser error message without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-022",
+    "request": "Add the parser error message in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-023",
+    "request": "Add the parser error message with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-024",
+    "request": "Add the parser error message while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-025",
+    "request": "Add the parser error message without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-026",
+    "request": "Add a focused service helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-027",
+    "request": "Add a focused service helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-028",
+    "request": "Add a focused service helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-029",
+    "request": "Add a focused service helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-030",
+    "request": "Add a focused service helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-031",
+    "request": "Add type annotations in one module without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-032",
+    "request": "Add type annotations in one module in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-033",
+    "request": "Add type annotations in one module with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-034",
+    "request": "Add type annotations in one module while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-035",
+    "request": "Add type annotations in one module without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-036",
+    "request": "Add a CLI help typo without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-037",
+    "request": "Add a CLI help typo in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-038",
+    "request": "Add a CLI help typo with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-039",
+    "request": "Add a CLI help typo while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-040",
+    "request": "Add a CLI help typo without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-041",
+    "request": "Add one missing test assertion without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-042",
+    "request": "Add one missing test assertion in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-043",
+    "request": "Add one missing test assertion with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-044",
+    "request": "Add one missing test assertion while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-045",
+    "request": "Add one missing test assertion without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-046",
+    "request": "Add a deterministic export helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-047",
+    "request": "Add a deterministic export helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-048",
+    "request": "Add a deterministic export helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-049",
+    "request": "Add a deterministic export helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-050",
+    "request": "Add a deterministic export helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-051",
+    "request": "Add a narrow configuration default without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-052",
+    "request": "Add a narrow configuration default in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-053",
+    "request": "Add a narrow configuration default with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-054",
+    "request": "Add a narrow configuration default while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-055",
+    "request": "Add a narrow configuration default without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-056",
+    "request": "Add the report label formatter without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-057",
+    "request": "Add the report label formatter in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-058",
+    "request": "Add the report label formatter with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-059",
+    "request": "Add the report label formatter while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-060",
+    "request": "Add the report label formatter without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-061",
+    "request": "Fix a docstring in the validator module without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-062",
+    "request": "Fix a docstring in the validator module in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-063",
+    "request": "Fix a docstring in the validator module with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-064",
+    "request": "Fix a docstring in the validator module while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-065",
+    "request": "Fix a docstring in the validator module without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-066",
+    "request": "Fix the isolated comma parsing helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-067",
+    "request": "Fix the isolated comma parsing helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-068",
+    "request": "Fix the isolated comma parsing helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-069",
+    "request": "Fix the isolated comma parsing helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-070",
+    "request": "Fix the isolated comma parsing helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-071",
+    "request": "Fix a unit test for session expiration without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-072",
+    "request": "Fix a unit test for session expiration in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-073",
+    "request": "Fix a unit test for session expiration with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-074",
+    "request": "Fix a unit test for session expiration while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-075",
+    "request": "Fix a unit test for session expiration without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-076",
+    "request": "Fix a small validation helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-077",
+    "request": "Fix a small validation helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-078",
+    "request": "Fix a small validation helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-079",
+    "request": "Fix a small validation helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-080",
+    "request": "Fix a small validation helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-081",
+    "request": "Fix the parser error message without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-082",
+    "request": "Fix the parser error message in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-083",
+    "request": "Fix the parser error message with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-084",
+    "request": "Fix the parser error message while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-085",
+    "request": "Fix the parser error message without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-086",
+    "request": "Fix a focused service helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-087",
+    "request": "Fix a focused service helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-088",
+    "request": "Fix a focused service helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-089",
+    "request": "Fix a focused service helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-090",
+    "request": "Fix a focused service helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-091",
+    "request": "Fix type annotations in one module without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-092",
+    "request": "Fix type annotations in one module in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-093",
+    "request": "Fix type annotations in one module with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-094",
+    "request": "Fix type annotations in one module while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-095",
+    "request": "Fix type annotations in one module without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-096",
+    "request": "Fix a CLI help typo without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-097",
+    "request": "Fix a CLI help typo in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-098",
+    "request": "Fix a CLI help typo with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-099",
+    "request": "Fix a CLI help typo while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-100",
+    "request": "Fix a CLI help typo without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-101",
+    "request": "Fix one missing test assertion without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-102",
+    "request": "Fix one missing test assertion in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-103",
+    "request": "Fix one missing test assertion with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-104",
+    "request": "Fix one missing test assertion while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-105",
+    "request": "Fix one missing test assertion without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-106",
+    "request": "Fix a deterministic export helper without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-107",
+    "request": "Fix a deterministic export helper in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-108",
+    "request": "Fix a deterministic export helper with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-109",
+    "request": "Fix a deterministic export helper while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-110",
+    "request": "Fix a deterministic export helper without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-111",
+    "request": "Fix a narrow configuration default without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-112",
+    "request": "Fix a narrow configuration default in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-113",
+    "request": "Fix a narrow configuration default with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-114",
+    "request": "Fix a narrow configuration default while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-115",
+    "request": "Fix a narrow configuration default without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-116",
+    "request": "Fix the report label formatter without changing public APIs.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-117",
+    "request": "Fix the report label formatter in one file only.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-118",
+    "request": "Fix the report label formatter with focused unit tests.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-119",
+    "request": "Fix the report label formatter while preserving current behavior.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "local-code-120",
+    "request": "Fix the report label formatter without adding dependencies.",
+    "expected_route": "local_code"
+  },
+  {
+    "id": "frontier-standard-001",
+    "request": "Implement a consistent export feature across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-002",
+    "request": "Implement a consistent export feature across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-003",
+    "request": "Implement a consistent export feature throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-004",
+    "request": "Implement a consistent export feature end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-005",
+    "request": "Implement a consistent export feature across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-006",
+    "request": "Implement structured error handling across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-007",
+    "request": "Implement structured error handling across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-008",
+    "request": "Implement structured error handling throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-009",
+    "request": "Implement structured error handling end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-010",
+    "request": "Implement structured error handling across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-011",
+    "request": "Implement a shared validation interface across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-012",
+    "request": "Implement a shared validation interface across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-013",
+    "request": "Implement a shared validation interface throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-014",
+    "request": "Implement a shared validation interface end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-015",
+    "request": "Implement a shared validation interface across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-016",
+    "request": "Implement cross-module type annotations across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-017",
+    "request": "Implement cross-module type annotations across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-018",
+    "request": "Implement cross-module type annotations throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-019",
+    "request": "Implement cross-module type annotations end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-020",
+    "request": "Implement cross-module type annotations across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-021",
+    "request": "Implement a repository-wide logging adapter across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-022",
+    "request": "Implement a repository-wide logging adapter across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-023",
+    "request": "Implement a repository-wide logging adapter throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-024",
+    "request": "Implement a repository-wide logging adapter end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-025",
+    "request": "Implement a repository-wide logging adapter across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-026",
+    "request": "Implement a unified parser result model across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-027",
+    "request": "Implement a unified parser result model across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-028",
+    "request": "Implement a unified parser result model throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-029",
+    "request": "Implement a unified parser result model end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-030",
+    "request": "Implement a unified parser result model across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-031",
+    "request": "Implement a complete CLI output overhaul across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-032",
+    "request": "Implement a complete CLI output overhaul across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-033",
+    "request": "Implement a complete CLI output overhaul throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-034",
+    "request": "Implement a complete CLI output overhaul end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-035",
+    "request": "Implement a complete CLI output overhaul across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-036",
+    "request": "Implement an end-to-end report schema across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-037",
+    "request": "Implement an end-to-end report schema across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-038",
+    "request": "Implement an end-to-end report schema throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-039",
+    "request": "Implement an end-to-end report schema end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-040",
+    "request": "Implement an end-to-end report schema across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-041",
+    "request": "Implement a package-wide configuration layer across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-042",
+    "request": "Implement a package-wide configuration layer across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-043",
+    "request": "Implement a package-wide configuration layer throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-044",
+    "request": "Implement a package-wide configuration layer end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-045",
+    "request": "Implement a package-wide configuration layer across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-046",
+    "request": "Implement a comprehensive test fixture system across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-047",
+    "request": "Implement a comprehensive test fixture system across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-048",
+    "request": "Implement a comprehensive test fixture system throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-049",
+    "request": "Implement a comprehensive test fixture system end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-050",
+    "request": "Implement a comprehensive test fixture system across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-051",
+    "request": "Implement a full telemetry serialization update across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-052",
+    "request": "Implement a full telemetry serialization update across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-053",
+    "request": "Implement a full telemetry serialization update throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-054",
+    "request": "Implement a full telemetry serialization update end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-055",
+    "request": "Implement a full telemetry serialization update across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-056",
+    "request": "Implement a cross-module service protocol across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-057",
+    "request": "Implement a cross-module service protocol across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-058",
+    "request": "Implement a cross-module service protocol throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-059",
+    "request": "Implement a cross-module service protocol end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-060",
+    "request": "Implement a cross-module service protocol across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-061",
+    "request": "Refactor a consistent export feature across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-062",
+    "request": "Refactor a consistent export feature across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-063",
+    "request": "Refactor a consistent export feature throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-064",
+    "request": "Refactor a consistent export feature end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-065",
+    "request": "Refactor a consistent export feature across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-066",
+    "request": "Refactor structured error handling across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-067",
+    "request": "Refactor structured error handling across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-068",
+    "request": "Refactor structured error handling throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-069",
+    "request": "Refactor structured error handling end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-070",
+    "request": "Refactor structured error handling across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-071",
+    "request": "Refactor a shared validation interface across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-072",
+    "request": "Refactor a shared validation interface across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-073",
+    "request": "Refactor a shared validation interface throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-074",
+    "request": "Refactor a shared validation interface end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-075",
+    "request": "Refactor a shared validation interface across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-076",
+    "request": "Refactor cross-module type annotations across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-077",
+    "request": "Refactor cross-module type annotations across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-078",
+    "request": "Refactor cross-module type annotations throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-079",
+    "request": "Refactor cross-module type annotations end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-080",
+    "request": "Refactor cross-module type annotations across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-081",
+    "request": "Refactor a repository-wide logging adapter across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-082",
+    "request": "Refactor a repository-wide logging adapter across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-083",
+    "request": "Refactor a repository-wide logging adapter throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-084",
+    "request": "Refactor a repository-wide logging adapter end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-085",
+    "request": "Refactor a repository-wide logging adapter across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-086",
+    "request": "Refactor a unified parser result model across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-087",
+    "request": "Refactor a unified parser result model across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-088",
+    "request": "Refactor a unified parser result model throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-089",
+    "request": "Refactor a unified parser result model end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-090",
+    "request": "Refactor a unified parser result model across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-091",
+    "request": "Refactor a complete CLI output overhaul across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-092",
+    "request": "Refactor a complete CLI output overhaul across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-093",
+    "request": "Refactor a complete CLI output overhaul throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-094",
+    "request": "Refactor a complete CLI output overhaul end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-095",
+    "request": "Refactor a complete CLI output overhaul across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-096",
+    "request": "Refactor an end-to-end report schema across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-097",
+    "request": "Refactor an end-to-end report schema across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-098",
+    "request": "Refactor an end-to-end report schema throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-099",
+    "request": "Refactor an end-to-end report schema end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-100",
+    "request": "Refactor an end-to-end report schema across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-101",
+    "request": "Refactor a package-wide configuration layer across the codebase while preserving compatibility.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-102",
+    "request": "Refactor a package-wide configuration layer across all modules with comprehensive tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-103",
+    "request": "Refactor a package-wide configuration layer throughout the entire package without optional dependencies.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-104",
+    "request": "Refactor a package-wide configuration layer end-to-end across all files while keeping current behavior.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-standard-105",
+    "request": "Refactor a package-wide configuration layer across the full repository with documentation and tests.",
+    "expected_route": "frontier_standard"
+  },
+  {
+    "id": "frontier-deep-001",
+    "request": "Redesign authentication for the session workflow while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-002",
+    "request": "Redesign authentication for the session workflow with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-003",
+    "request": "Redesign authentication for the session workflow without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-004",
+    "request": "Redesign authentication for the session workflow and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-005",
+    "request": "Redesign authentication for the session workflow with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-006",
+    "request": "Redesign authentication for the validator service while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-007",
+    "request": "Redesign authentication for the validator service with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-008",
+    "request": "Redesign authentication for the validator service without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-009",
+    "request": "Redesign authentication for the validator service and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-010",
+    "request": "Redesign authentication for the validator service with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-011",
+    "request": "Redesign authentication for the parser pipeline while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-012",
+    "request": "Redesign authentication for the parser pipeline with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-013",
+    "request": "Redesign authentication for the parser pipeline without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-014",
+    "request": "Redesign authentication for the parser pipeline and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-015",
+    "request": "Redesign authentication for the parser pipeline with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-016",
+    "request": "Redesign authentication for the telemetry subsystem while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-017",
+    "request": "Redesign authentication for the telemetry subsystem with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-018",
+    "request": "Redesign authentication for the telemetry subsystem without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-019",
+    "request": "Redesign authentication for the telemetry subsystem and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-020",
+    "request": "Redesign authentication for the telemetry subsystem with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-021",
+    "request": "Redesign authentication for the report service while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-022",
+    "request": "Redesign authentication for the report service with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-023",
+    "request": "Redesign authentication for the report service without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-024",
+    "request": "Redesign authentication for the report service and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-025",
+    "request": "Redesign authentication for the report service with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-026",
+    "request": "Redesign authentication for the CLI application while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-027",
+    "request": "Redesign authentication for the CLI application with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-028",
+    "request": "Redesign authentication for the CLI application without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-029",
+    "request": "Redesign authentication for the CLI application and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-030",
+    "request": "Redesign authentication for the CLI application with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-031",
+    "request": "Redesign authentication for the repository layer while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-032",
+    "request": "Redesign authentication for the repository layer with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-033",
+    "request": "Redesign authentication for the repository layer without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-034",
+    "request": "Redesign authentication for the repository layer and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-035",
+    "request": "Redesign authentication for the repository layer with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-036",
+    "request": "Redesign authentication for the demo deployment while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-037",
+    "request": "Redesign authentication for the demo deployment with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-038",
+    "request": "Redesign authentication for the demo deployment without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-039",
+    "request": "Redesign authentication for the demo deployment and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-040",
+    "request": "Redesign authentication for the demo deployment with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-041",
+    "request": "Redesign authentication for the package architecture while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-042",
+    "request": "Redesign authentication for the package architecture with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-043",
+    "request": "Redesign authentication for the package architecture without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-044",
+    "request": "Redesign authentication for the package architecture and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-045",
+    "request": "Redesign authentication for the package architecture with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-046",
+    "request": "Redesign authorization for the session workflow while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-047",
+    "request": "Redesign authorization for the session workflow with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-048",
+    "request": "Redesign authorization for the session workflow without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-049",
+    "request": "Redesign authorization for the session workflow and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-050",
+    "request": "Redesign authorization for the session workflow with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-051",
+    "request": "Redesign authorization for the validator service while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-052",
+    "request": "Redesign authorization for the validator service with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-053",
+    "request": "Redesign authorization for the validator service without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-054",
+    "request": "Redesign authorization for the validator service and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-055",
+    "request": "Redesign authorization for the validator service with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-056",
+    "request": "Redesign authorization for the parser pipeline while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-057",
+    "request": "Redesign authorization for the parser pipeline with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-058",
+    "request": "Redesign authorization for the parser pipeline without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-059",
+    "request": "Redesign authorization for the parser pipeline and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-060",
+    "request": "Redesign authorization for the parser pipeline with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-061",
+    "request": "Redesign authorization for the telemetry subsystem while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-062",
+    "request": "Redesign authorization for the telemetry subsystem with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-063",
+    "request": "Redesign authorization for the telemetry subsystem without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-064",
+    "request": "Redesign authorization for the telemetry subsystem and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-065",
+    "request": "Redesign authorization for the telemetry subsystem with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-066",
+    "request": "Redesign authorization for the report service while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-067",
+    "request": "Redesign authorization for the report service with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-068",
+    "request": "Redesign authorization for the report service without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-069",
+    "request": "Redesign authorization for the report service and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-070",
+    "request": "Redesign authorization for the report service with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-071",
+    "request": "Redesign authorization for the CLI application while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-072",
+    "request": "Redesign authorization for the CLI application with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-073",
+    "request": "Redesign authorization for the CLI application without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-074",
+    "request": "Redesign authorization for the CLI application and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-075",
+    "request": "Redesign authorization for the CLI application with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-076",
+    "request": "Redesign authorization for the repository layer while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-077",
+    "request": "Redesign authorization for the repository layer with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-078",
+    "request": "Redesign authorization for the repository layer without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-079",
+    "request": "Redesign authorization for the repository layer and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-080",
+    "request": "Redesign authorization for the repository layer with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-081",
+    "request": "Redesign authorization for the demo deployment while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-082",
+    "request": "Redesign authorization for the demo deployment with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-083",
+    "request": "Redesign authorization for the demo deployment without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-084",
+    "request": "Redesign authorization for the demo deployment and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-085",
+    "request": "Redesign authorization for the demo deployment with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-086",
+    "request": "Redesign authorization for the package architecture while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-087",
+    "request": "Redesign authorization for the package architecture with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-088",
+    "request": "Redesign authorization for the package architecture without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-089",
+    "request": "Redesign authorization for the package architecture and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-090",
+    "request": "Redesign authorization for the package architecture with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-091",
+    "request": "Redesign security for the session workflow while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-092",
+    "request": "Redesign security for the session workflow with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-093",
+    "request": "Redesign security for the session workflow without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-094",
+    "request": "Redesign security for the session workflow and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-095",
+    "request": "Redesign security for the session workflow with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-096",
+    "request": "Redesign security for the validator service while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-097",
+    "request": "Redesign security for the validator service with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-098",
+    "request": "Redesign security for the validator service without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-099",
+    "request": "Redesign security for the validator service and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-100",
+    "request": "Redesign security for the validator service with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-101",
+    "request": "Redesign security for the parser pipeline while preserving existing behavior.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-102",
+    "request": "Redesign security for the parser pipeline with a complete repository-wide implementation.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-103",
+    "request": "Redesign security for the parser pipeline without weakening safety checks.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-104",
+    "request": "Redesign security for the parser pipeline and update all affected modules.",
+    "expected_route": "frontier_deep"
+  },
+  {
+    "id": "frontier-deep-105",
+    "request": "Redesign security for the parser pipeline with migration and rollback planning.",
+    "expected_route": "frontier_deep"
+  }
+]

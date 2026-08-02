@@ -1,0 +1,6 @@
+{"case_id":"doc-1","request":"Update the README installation example","expected_task_category":"documentation","expected_complexity_band":"low","acceptable_routes":["frontier_deep","local_code","local_fast"],"expected_risk_factors":[]}
+{"case_id":"bug-1","request":"Fix the parser regression and add focused tests","expected_task_category":"testing","expected_complexity_band":"medium","acceptable_routes":["local_code"],"expected_risk_factors":[]}
+{"case_id":"security-1","request":"Redesign authentication and rotate production credentials","expected_task_category":"security","expected_complexity_band":"high","acceptable_routes":["frontier_deep"],"expected_risk_factors":["security"]}
+{"case_id":"architecture-1","request":"Split the system into microservices across all modules","expected_task_category":"architecture","expected_complexity_band":"high","acceptable_routes":["frontier_deep"],"expected_risk_factors":["architecture"]}
+{"case_id":"investigate-1","request":"Find where Router is configured","expected_task_category":"repository_investigation","expected_complexity_band":"low","acceptable_routes":["local_fast"],"expected_risk_factors":[]}
+{"case_id":"perf-1","request":"Benchmark and optimize repository search latency","expected_task_category":"performance","expected_complexity_band":"medium","acceptable_routes":["local_code"],"expected_risk_factors":[]}

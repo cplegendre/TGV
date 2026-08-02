@@ -1,0 +1,9 @@
+Where is refresh-token validation implemented?
+Explain the repository's test layout.
+Fix the typo in parser.py and add a focused test.
+Redesign authentication across all services.
+
+# v0.29 routing and handoff examples
+Explain which module loads configuration.
+Implement a bounded parser fix without changing the public API.
+Review this authentication redesign and preserve offline behavior.

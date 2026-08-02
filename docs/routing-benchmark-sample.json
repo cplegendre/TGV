@@ -1,0 +1,24 @@
+{
+  "acceptable_route_accuracy": 1.0,
+  "accuracy": 1.0,
+  "confusion_matrix": {
+    "frontier->frontier": 32,
+    "local_code->local_code": 18,
+    "local_fast->local_fast": 26
+  },
+  "high_confidence_wrong": [],
+  "high_risk_violations": [],
+  "low_confidence_correct": [],
+  "per_category_accuracy": {
+    "ambiguous": 1.0,
+    "code": 1.0,
+    "conflicting-signals": 1.0,
+    "frontier-handoff": 1.0,
+    "high-risk": 1.0,
+    "privacy-sensitive": 1.0,
+    "repository-inspection": 1.0,
+    "simple": 1.0,
+    "stay-local": 1.0
+  },
+  "total_cases": 76
+}

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.tmp
+
+# TGV runtime
+.tgv/
+tgv.yaml
+*.context-bundle.json
+
+# Local models and indexes
+*.gguf
+*.safetensors
+.ollama/
+.hf_cache/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local backup
+Backup/

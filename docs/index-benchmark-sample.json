@@ -1,0 +1,11 @@
+{
+  "build_seconds": 0.013799,
+  "cache_hits": 86,
+  "cache_misses": 1,
+  "files_indexed": 86,
+  "files_skipped": 37,
+  "query": "RouteDecision Repository",
+  "results": 20,
+  "search_seconds": 0.024287,
+  "symbols_extracted": 718
+}

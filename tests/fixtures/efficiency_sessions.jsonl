@@ -1,0 +1,6 @@
+{"request":"Where is the authentication configuration?","aggregate_ter":0.92,"aligned_tokens":92,"waste_tokens":8}
+{"request":"Explain the repository layout?","aggregate_ter":0.88,"aligned_tokens":88,"waste_tokens":12}
+{"request":"Implement a bounded parser fix","aggregate_ter":0.78,"aligned_tokens":78,"waste_tokens":22}
+{"request":"Write tests for the config loader","aggregate_ter":0.82,"aligned_tokens":82,"waste_tokens":18}
+{"request":"Review the distributed architecture migration","aggregate_ter":0.90,"aligned_tokens":90,"waste_tokens":10}
+{"request":"Investigate this unclear behavior","aggregate_ter":0.84,"aligned_tokens":84,"waste_tokens":16}
