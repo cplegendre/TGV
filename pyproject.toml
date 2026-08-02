@@ -32,7 +32,7 @@ ter = ["ter-calculator @ git+https://github.com/cplegendre/TER.git@v3.0.0"]
 dev = [
   "build>=1.2,<2",
   "mypy>=1.11,<2",
-  "pytest>=8,<9",
+  "pytest>=9.0.3,<10",
   "pytest-cov>=5,<7",
   "ruff>=0.6,<1",
   "types-PyYAML>=6.0.12",
@@ -87,6 +87,10 @@ python_version = "3.11"
 strict = true
 packages = ["tgv"]
 warn_unused_ignores = true
+exclude = [
+    "^demo/",
+    "^src/tgv/demo_assets/sample-repo/",
+]
 
 [[tool.mypy.overrides]]
 module = ["ter_calculator", "ter_calculator.*"]
