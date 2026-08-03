@@ -287,6 +287,32 @@ def test_command_provider_success(tmp_path: Path) -> None:
     assert result[0] == sys.executable
 
 
+def test_command_provider_bounds_large_diagnostics(tmp_path: Path) -> None:
+    provider = CommandHandoffProvider(
+        [
+            sys.executable,
+            "-c",
+            "import sys; print('x' * 1000000); print('y' * 1000000, file=sys.stderr)",
+        ],
+    )
+    metadata = provider.invoke_with_metadata(str(tmp_path / "h.md"), str(tmp_path / "b.json"))
+    assert len(metadata.stdout_excerpt) <= 2000
+    assert len(metadata.stderr_excerpt) <= 2000
+
+
+def test_calibrate_apply_preserves_original_on_replace_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "tgv.yaml"
+    original = "version: 1\nmodels: {}\n"
+    config_path.write_text(original, encoding="utf-8")
+    monkeypatch.setattr("tgv.cli.score_sessions", lambda _: [])
+    monkeypatch.setattr("tgv.cli.os.replace", Mock(side_effect=OSError("replace failed")))
+    with pytest.raises(OSError):
+        main(["calibrate", "--config", str(config_path), "--sessions", str(tmp_path), "--apply"])
+    assert config_path.read_text(encoding="utf-8") == original
+
+
 def test_repository_read_oserror_and_search_excerpt_skip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,5 +1,6 @@
 import io
 import json
+import time
 
 from tgv.daemon import _atomic_status, serve
 from tgv.models import Route, RouteDecision
@@ -10,6 +11,12 @@ class FakeService:
         if request == "slow":
             return RouteDecision(route=Route.LOCAL_FAST, confidence=1, rationale="ok")
         return RouteDecision(route=Route.LOCAL_FAST, confidence=1, rationale="ok")
+
+
+class BlockingService(FakeService):
+    def route(self, request: str) -> RouteDecision:
+        time.sleep(1)
+        return super().route(request)
 
 
 def test_atomic_status_and_sequential_serve(tmp_path) -> None:
@@ -39,15 +46,15 @@ def test_atomic_status_and_sequential_serve(tmp_path) -> None:
     assert status["last_request_at"]
 
 
-def test_serve_timeout(monkeypatch) -> None:
-    ticks = iter([0.0, 2.0, 2.1])
-    monkeypatch.setattr("tgv.daemon.time.monotonic", lambda: next(ticks))
+def test_serve_timeout_interrupts_blocking_request() -> None:
     stdout = io.StringIO()
+    started = time.monotonic()
     serve(
-        FakeService(),  # type: ignore[arg-type]
-        timeout_seconds=1,
+        BlockingService(),  # type: ignore[arg-type]
+        timeout_seconds=0.1,
         input_stream=io.StringIO('{"request":"slow"}\n'),
         output_stream=stdout,
         error_stream=io.StringIO(),
     )
+    assert time.monotonic() - started < 0.9
     assert "exceeded" in json.loads(stdout.getvalue())["error"]

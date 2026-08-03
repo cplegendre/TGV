@@ -25,6 +25,27 @@ def _atomic_status(path: Path, status: dict[str, object]) -> None:
     temporary.replace(path)
 
 
+class _RequestDeadline:
+    def __init__(self, seconds: float) -> None:
+        self.seconds = seconds
+        self.previous = None
+
+    def __enter__(self) -> None:
+        if not hasattr(signal, "SIGALRM"):
+            raise RuntimeError("request timeouts require SIGALRM")
+        self.previous = signal.getsignal(signal.SIGALRM)
+
+        def timeout(_signum: int, _frame: object) -> None:
+            raise TimeoutError(f"request exceeded {self.seconds:g}s timeout")
+
+        signal.signal(signal.SIGALRM, timeout)
+        signal.setitimer(signal.ITIMER_REAL, self.seconds)
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, self.previous)
+
+
 def serve(
     service: TGVService,
     *,
@@ -65,11 +86,9 @@ def serve(
                 request = payload["request"]
                 if not isinstance(request, str):
                     raise ValueError("request must be a string")
-                decision = service.route(request)
+                with _RequestDeadline(timeout_seconds):
+                    decision = service.route(request)
                 route = decision.route.value
-                elapsed = time.monotonic() - started
-                if elapsed > timeout_seconds:
-                    raise TimeoutError(f"request exceeded {timeout_seconds:g}s timeout")
                 print(
                     json.dumps(
                         {"request_id": request_id, "decision": decision.model_dump(mode="json")}

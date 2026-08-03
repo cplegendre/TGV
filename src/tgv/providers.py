@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import email.utils
 import json
 import time
 from collections.abc import Callable
@@ -11,6 +12,24 @@ import httpx
 
 from tgv.exceptions import ConfigurationError, ModelProviderError
 from tgv.models import HandoffMode, ModelRoleConfig, ProviderLifecycle, RouteDecision
+
+
+def _retryable_response(response: httpx.Response) -> bool:
+    return response.status_code == 429 or 500 <= response.status_code < 600
+
+
+def _retry_after(response: httpx.Response, fallback: float) -> float:
+    value = response.headers.get("Retry-After")
+    if value is None:
+        return fallback
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            retry_at = email.utils.parsedate_to_datetime(value)
+            return max(0.0, retry_at.timestamp() - time.time())
+        except (TypeError, ValueError, OverflowError):
+            return fallback
 
 
 class LocalModelProvider(Protocol):
@@ -85,10 +104,20 @@ class OllamaProvider:
                 if not isinstance(content, str):
                     raise ValueError("Ollama response message.content must be a string")
                 return RouteDecision.model_validate_json(content)
-            except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                if not _retryable_response(exc.response) or attempt >= self.config.maximum_retries:
+                    break
+                self.sleep(
+                    _retry_after(exc.response, self.config.retry_backoff_seconds * (2**attempt))
+                )
+            except httpx.TransportError as exc:
                 last_error = exc
                 if attempt < self.config.maximum_retries:
                     self.sleep(self.config.retry_backoff_seconds * (2**attempt))
+            except (KeyError, TypeError, ValueError) as exc:
+                last_error = exc
+                break
         raise ModelProviderError(
             f"Ollama routing failed after retries: {last_error}"
         ) from last_error
@@ -173,10 +202,20 @@ class OpenAICompatibleProvider:
                 if not isinstance(content, str):
                     raise ValueError("OpenAI-compatible response content must be a string")
                 return RouteDecision.model_validate_json(content)
-            except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                if not _retryable_response(exc.response) or attempt >= self.config.maximum_retries:
+                    break
+                self.sleep(
+                    _retry_after(exc.response, self.config.retry_backoff_seconds * (2**attempt))
+                )
+            except httpx.TransportError as exc:
                 last_error = exc
                 if attempt < self.config.maximum_retries:
                     self.sleep(self.config.retry_backoff_seconds * (2**attempt))
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                last_error = exc
+                break
         raise ModelProviderError(
             f"OpenAI-compatible routing failed after retries: {last_error}"
         ) from last_error
@@ -290,14 +329,21 @@ class CommandHandoffProvider:
                 update={"completed_at": self._timestamp(), "command_status": "dry-run"}
             )
         try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                timeout=self.timeout_seconds,
-                text=True,
-                capture_output=True,
-                shell=False,
-            )
+            import tempfile
+
+            with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+                completed = subprocess.run(
+                    command,
+                    check=False,
+                    timeout=self.timeout_seconds,
+                    stdout=stdout_file,
+                    stderr=stderr_file,
+                    shell=False,
+                )
+                stdout_file.seek(0)
+                stderr_file.seek(0)
+                stdout = stdout_file.read(2000).decode("utf-8", errors="replace")
+                stderr = stderr_file.read(2000).decode("utf-8", errors="replace")
         except FileNotFoundError as exc:
             raise ProviderUnavailableError(f"Handoff command is unavailable: {command[0]}") from exc
         except subprocess.TimeoutExpired as exc:
@@ -308,8 +354,8 @@ class CommandHandoffProvider:
             update={
                 "completed_at": self._timestamp(),
                 "exit_code": completed.returncode,
-                "stdout_excerpt": self._bounded(completed.stdout),
-                "stderr_excerpt": self._bounded(completed.stderr),
+                "stdout_excerpt": self._bounded(stdout),
+                "stderr_excerpt": self._bounded(stderr),
                 "command_status": "succeeded" if completed.returncode == 0 else "failed",
             }
         )

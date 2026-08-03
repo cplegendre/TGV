@@ -6,7 +6,12 @@ import pytest
 
 from tgv.exceptions import ConfigurationError, ModelProviderError
 from tgv.models import ModelRoleConfig, Route, RoutingConfig
-from tgv.providers import OllamaProvider, OpenAICompatibleProvider, create_local_provider
+from tgv.providers import (
+    OllamaProvider,
+    OpenAICompatibleProvider,
+    _retry_after,
+    create_local_provider,
+)
 from tgv.router import Router
 
 
@@ -80,6 +85,57 @@ def test_provider_accepts_valid_structured_response() -> None:
     assert provider.route("Where is auth?").confidence == 0.95
 
 
+@pytest.mark.parametrize("status", [401, 403, 400])
+def test_ollama_does_not_retry_permanent_http_failures(status: int) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status)
+
+    provider = OllamaProvider(
+        config(maximum_retries=2), client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(ModelProviderError):
+        provider.route("Fix parser")
+    assert calls == 1
+
+
+@pytest.mark.parametrize("status", [429, 500])
+def test_ollama_retries_transient_http_failures(status: int) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status, headers={"Retry-After": "0"})
+
+    provider = OllamaProvider(
+        config(maximum_retries=1), client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(ModelProviderError):
+        provider.route("Fix parser")
+    assert calls == 2
+
+
+@pytest.mark.parametrize("content", [b"not json", json.dumps({"route": "invalid"}).encode()])
+def test_ollama_does_not_retry_malformed_or_invalid_responses(content: bytes) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, content=content, headers={"content-type": "application/json"})
+
+    provider = OllamaProvider(
+        config(maximum_retries=2), client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(ModelProviderError):
+        provider.route("Fix parser")
+    assert calls == 1
+
+
 def test_provider_closes_only_owned_client() -> None:
     owned = Mock()
     with patch("tgv.providers.httpx.Client", return_value=owned):
@@ -136,6 +192,50 @@ def test_openai_compatible_timeout() -> None:
     )
     with pytest.raises(ModelProviderError, match="OpenAI-compatible"):
         provider.route("Fix parser")
+
+
+def test_retry_after_invalid_value_uses_fallback() -> None:
+    response = httpx.Response(429, headers={"Retry-After": "later"})
+    assert _retry_after(response, 3.0) == 3.0
+
+
+def test_retry_after_missing_value_uses_fallback() -> None:
+    assert _retry_after(httpx.Response(429), 3.0) == 3.0
+
+
+def test_openai_compatible_retries_transport_failure() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.ConnectError("offline", request=request)
+
+    provider = OpenAICompatibleProvider(
+        openai_config(maximum_retries=1, retry_backoff_seconds=0),
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ModelProviderError):
+        provider.route("Fix parser")
+    assert calls == 2
+
+
+@pytest.mark.parametrize("status, expected_calls", [(401, 1), (429, 2), (500, 2)])
+def test_openai_compatible_retry_policy(status: int, expected_calls: int) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status, headers={"Retry-After": "0"})
+
+    provider = OpenAICompatibleProvider(
+        openai_config(maximum_retries=1, retry_backoff_seconds=0),
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ModelProviderError):
+        provider.route("Fix parser")
+    assert calls == expected_calls
 
 
 def test_openai_compatible_non_json_content() -> None:
@@ -199,4 +299,4 @@ def test_openai_compatible_retries_and_rejects_non_string() -> None:
     )
     with pytest.raises(ModelProviderError):
         provider.route("Fix parser")
-    assert calls == 2
+    assert calls == 1

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,16 @@ from tgv.exceptions import (
 from tgv.models import HandoffMode
 from tgv.providers import OllamaProvider, OpenAICompatibleProvider
 from tgv.service import TGVService
+
+
+def _positive_limit(value: str) -> int:
+    try:
+        limit = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("limit must be a positive integer") from exc
+    if not 1 <= limit <= 10_000:
+        raise argparse.ArgumentTypeError("limit must be between 1 and 10000")
+    return limit
 
 
 def _path(value: str) -> Path:
@@ -134,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     outcomes.add_argument("--repo", type=_path, default=Path.cwd())
     outcomes.add_argument("--config", type=_path)
     outcomes.add_argument("--format", choices=("json", "csv"), default="json")
-    outcomes.add_argument("--limit", type=int, default=100)
+    outcomes.add_argument("--limit", type=_positive_limit, default=100)
 
     scoreboard = sub.add_parser(
         "scoreboard", help="Show historical model utility for a request (experimental)"
@@ -291,10 +303,23 @@ def main(argv: list[str] | None = None) -> None:
                             proposal.threshold_name,
                             proposal.proposed_threshold,
                         )
-                args.config.write_text(
-                    yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False),
-                    encoding="utf-8",
-                )
+                serialized = yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False)
+                original_mode = args.config.stat().st_mode
+                temporary_path: Path | None = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", encoding="utf-8", dir=args.config.parent, delete=False
+                    ) as temporary:
+                        temporary_path = Path(temporary.name)
+                        temporary.write(serialized)
+                        temporary.flush()
+                        os.fsync(temporary.fileno())
+                    os.chmod(temporary_path, original_mode)
+                    os.replace(temporary_path, args.config)
+                    temporary_path = None
+                finally:
+                    if temporary_path is not None:
+                        temporary_path.unlink(missing_ok=True)
             if args.format == "json":
                 print(json.dumps([proposal.__dict__ for proposal in proposals], indent=2))
             else:
