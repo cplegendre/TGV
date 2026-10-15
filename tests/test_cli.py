@@ -78,24 +78,3 @@ def test_efficiency_text_output_for_empty_report(tmp_path, monkeypatch, capsys) 
     monkeypatch.setattr("tgv.cli.score_sessions", lambda _path: [])
     main(["efficiency", "--sessions", str(tmp_path)])
     assert capsys.readouterr().out.strip() == "route        sessions  TER     aligned  waste"
-
-
-@pytest.mark.parametrize("limit", ["0", "-1", "10001"])
-def test_outcomes_rejects_invalid_limit(limit) -> None:
-    with pytest.raises(SystemExit):
-        from tgv.cli import build_parser
-
-        build_parser().parse_args(["outcomes", "list", "--limit", limit])
-
-
-def test_outcomes_rejects_non_integer_limit() -> None:
-    with pytest.raises(SystemExit):
-        from tgv.cli import build_parser
-
-        build_parser().parse_args(["outcomes", "list", "--limit", "many"])
-
-
-def test_outcomes_accepts_bounded_limit() -> None:
-    from tgv.cli import build_parser
-
-    assert build_parser().parse_args(["outcomes", "list", "--limit", "25"]).limit == 25

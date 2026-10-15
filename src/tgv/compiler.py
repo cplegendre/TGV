@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tgv.models import ContextBundle, RouteDecision
+from tgv.observability import atomic_text
 from tgv.repository import Repository
 
 
@@ -45,14 +46,15 @@ class ContextCompiler:
 
     def write(self, bundle: ContextBundle, output: Path) -> None:
         output.mkdir(parents=True, exist_ok=True)
-        (output / "bundle.json").write_text(
-            bundle.model_dump_json(indent=2) + "\n", encoding="utf-8"
-        )
-        (output / "handoff.md").write_text(bundle.handoff_markdown + "\n", encoding="utf-8")
+        atomic_text(output / "bundle.json", bundle.model_dump_json(indent=2) + "\n")
+        atomic_text(output / "handoff.md", bundle.handoff_markdown + "\n")
 
     @staticmethod
     def _handoff(bundle: ContextBundle) -> str:
         d = bundle.decision
+        selected_tier = (
+            d.selected_capability_tier.value if d.selected_capability_tier else "unspecified"
+        )
         lines = [
             "# TGV Context Handoff",
             "",
@@ -67,6 +69,11 @@ class ContextCompiler:
             f"- Source: `{d.decision_source}`",
             f"- Rationale: {d.rationale}",
             f"- Matched signals: {', '.join(d.matched_signals) or 'none'}",
+            "",
+            "## Execution plan",
+            "",
+            f"- Model: `{d.selected_model or 'unspecified'}`",
+            f"- Capability tier: `{selected_tier}`",
             "",
             "## Task profile",
             "",

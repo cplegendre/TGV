@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 import sqlite3
 import uuid
 from collections.abc import Iterable
@@ -26,8 +27,14 @@ class OutcomeLedger:
 
     def _connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(self.path, timeout=5.0)
+        try:
+            os.chmod(self.path, 0o600)
+        except OSError:
+            pass
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout = 5000")
+        connection.execute("PRAGMA journal_mode = WAL")
         self._initialize(connection)
         return connection
 

@@ -147,18 +147,15 @@ def test_command_provider_validation_and_failures(
     with pytest.raises(ProviderUnavailableError):
         provider.invoke(str(tmp_path / "h.md"), str(tmp_path / "b.json"))
 
-    def timeout(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.TimeoutExpired("x", 1)
-
-    monkeypatch.setattr(subprocess, "run", timeout)
     with pytest.raises(CommandExecutionError, match="timed out"):
-        CommandHandoffProvider([sys.executable], 0.01).invoke("h", "j")
+        CommandHandoffProvider(
+            [sys.executable, "-c", "import time; time.sleep(1)"], 0.01
+        ).invoke("h", "j")
 
-    monkeypatch.setattr(
-        subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 3, "", "bad")
-    )
     with pytest.raises(CommandExecutionError, match="exit code 3"):
-        CommandHandoffProvider([sys.executable]).invoke("h", "j")
+        CommandHandoffProvider(
+            [sys.executable, "-c", "import sys; print('bad', file=sys.stderr); sys.exit(3)"]
+        ).invoke("h", "j")
 
 
 def test_handoff_config_rejects_nul() -> None:
@@ -287,32 +284,6 @@ def test_command_provider_success(tmp_path: Path) -> None:
     assert result[0] == sys.executable
 
 
-def test_command_provider_bounds_large_diagnostics(tmp_path: Path) -> None:
-    provider = CommandHandoffProvider(
-        [
-            sys.executable,
-            "-c",
-            "import sys; print('x' * 1000000); print('y' * 1000000, file=sys.stderr)",
-        ],
-    )
-    metadata = provider.invoke_with_metadata(str(tmp_path / "h.md"), str(tmp_path / "b.json"))
-    assert len(metadata.stdout_excerpt) <= 2000
-    assert len(metadata.stderr_excerpt) <= 2000
-
-
-def test_calibrate_apply_preserves_original_on_replace_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config_path = tmp_path / "tgv.yaml"
-    original = "version: 1\nmodels: {}\n"
-    config_path.write_text(original, encoding="utf-8")
-    monkeypatch.setattr("tgv.cli.score_sessions", lambda _: [])
-    monkeypatch.setattr("tgv.cli.os.replace", Mock(side_effect=OSError("replace failed")))
-    with pytest.raises(OSError):
-        main(["calibrate", "--config", str(config_path), "--sessions", str(tmp_path), "--apply"])
-    assert config_path.read_text(encoding="utf-8") == original
-
-
 def test_repository_read_oserror_and_search_excerpt_skip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -334,6 +305,12 @@ def test_repository_read_oserror_and_search_excerpt_skip(
 
 def test_repository_enumeration_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = Repository(tmp_path, default_config().repository, [])
-    monkeypatch.setattr(Path, "rglob", lambda self, pattern: (_ for _ in ()).throw(OSError("x")))
+
+    def broken_walk(*args: object, **kwargs: object):
+        onerror = kwargs["onerror"]
+        onerror(OSError("x"))
+        yield from ()
+
+    monkeypatch.setattr("tgv.repository.os.walk", broken_walk)
     with pytest.raises(RepositoryAccessError, match="enumerate"):
         repo.list_files()

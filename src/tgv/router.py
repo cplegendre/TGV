@@ -23,7 +23,8 @@ class FeatureExtractor:
         r"\b(must|do not|don't|preserve|only|without|at least|exactly|keep|avoid)\b", re.I
     )
     UNCERTAINTY = re.compile(
-        r"\b(maybe|possibly|unclear|unknown|unsure|might|could be|not sure)\b", re.I
+        r"\b(maybe|possibly|unclear|unknown|unsure|might|could be|not sure|take a look|something (?:is )?(?:odd|strange))\b",
+        re.I,
     )
     BROAD = re.compile(
         r"\b(entire|full|all (?:files|modules|services|issues|code)|production[- ]quality|comprehensive|across the codebase|end[- ]to[- ]end)\b",  # noqa: E501
@@ -64,7 +65,7 @@ class FeatureExtractor:
             if code and len(request.split()) <= 80 and not broad
             else (0.5 if code else 0.0),
             "ambiguous_scope": 1.0
-            if broad or (not simple and not code and len(request.split()) < 4)
+            if broad or uncertainty or (not simple and not code and len(request.split()) < 4)
             else 0.0,
             "high_risk": 1.0 if high else 0.0,
             "repository_aware": min(1.0, len(repo) / 3),

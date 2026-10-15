@@ -15,19 +15,27 @@ A tool argument may attempt to access files outside the configured repository. T
 
 ### Prompt injection in repository content
 
-Repository files may contain instructions intended to manipulate a model. Retrieved content is evidence, not trusted policy. Future providers should delimit evidence and maintain a higher-priority system policy.
+Repository files may contain instructions intended to manipulate a model. Retrieved content is evidence, not trusted policy. Providers should delimit evidence and maintain a higher-priority system policy.
 
 ### Secret disclosure
 
-Search and bundle generation may select sensitive files. Deny patterns and ignored paths reduce risk but are not a complete secret scanner. Hosted transmission must require an explicit integration and review policy.
+Search and bundle generation may select sensitive files. Deny patterns and ignored paths reduce risk but are not a complete secret scanner. Hosted transmission must require an explicit integration and review policy. External command metadata redacts common credential-bearing flags, but operators should pass secrets through environment variables rather than command arguments.
 
 ### Excessive resource consumption
 
-Large files, broad searches, and repeated tool calls can consume memory and tokens. TGV enforces file-size, result-count, excerpt, and tool-round limits.
+Large files, broad searches, repeated requests, noisy subprocesses, and large ignored trees can consume resources. TGV enforces file-size/result/excerpt limits, prunes ignored directories before descent, bounds retained subprocess diagnostics, and applies request deadlines in the stdio daemon. Routing runs in a persistent isolated worker process started with `spawn` on every supported platform. When a request exceeds its deadline, TGV terminates that worker before returning the timeout; the timed-out work cannot continue in a background thread. A clean worker is created for the next request. During SIGTERM/SIGINT shutdown, TGV stops accepting new requests, marks readiness as draining, allows the current request a configurable grace period, and then terminates the worker if necessary.
+
+### Local state disclosure and partial writes
+
+Operational state can reveal repository paths, route choices, model identifiers, or task metadata even when source contents are excluded. TGV 0.32 writes status, Prometheus metrics, repository indexes, telemetry files, and context bundles atomically and uses owner-only permissions on POSIX-compatible filesystems where supported. Operators should still protect the `.tgv` directory and any configured external state paths.
+
+### Outcome-store concurrency
+
+Multiple local processes can contend on the SQLite outcome ledger. TGV uses WAL mode and a busy timeout to reduce transient writer contention. This is not a substitute for a network database if high write concurrency becomes a requirement.
 
 ### Malicious MCP clients
 
-The v0.1 MCP surface is read-only. It does not expose shell execution or file writes. Deployments should use stdio for single-user local use and authenticate any future network transport.
+The v0.32 MCP surface is read-only. It does not expose shell execution or repository-source writes, and MCP service mode suppresses index, outcome, and telemetry persistence. Deployments should use stdio for single-user local use and authenticate any future network transport.
 
 ## Out of scope
 

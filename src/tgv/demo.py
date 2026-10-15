@@ -271,15 +271,18 @@ def render_demo(result: DemoResult) -> str:
             f"Result - PASS : {result.matched_routes}/{result.tasks_processed} "
             f"{passed_percent:.1f}% success"
         ),
-        (f"Result - FAIL : {result.failed_routes}/{result.tasks_processed} {failed_percent:.1f}%"),
+        (
+            f"Result - FAIL : {result.failed_routes}/{result.tasks_processed} "
+            f"{failed_percent:.1f}%"
+        ),
         "",
         "Report",
         "------",
         f"Local routes: {result.local_routes}",
         f"Frontier routes: {result.frontier_routes}",
         f"Local share: {result.local_share:.1%}",
-        f"Estimated token savings: {result.savings_tokens:,}",
-        f"Estimated avoided frontier-token share: {result.savings_ratio:.1%}",
+        f"Local-routed token volume (proxy): {result.savings_tokens:,}",
+        f"Local-routed token share (proxy): {result.savings_ratio:.1%}",
         f"Safety escalations: {result.safety_escalations}",
         f"Elapsed time: {result.elapsed_seconds:.3f} s",
         f"Routing throughput: {result.tasks_per_second:,.0f} tasks/s",

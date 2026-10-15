@@ -6,7 +6,7 @@
 TGV is an experimental local-first gateway for AI coding agents. It inspects a task, gathers repository evidence, decides whether the request can be handled locally, and prepares a compact handoff when a frontier model is warranted.
 
 > [!WARNING]
-> Version 0.29 is a production-hardening pre-1.0 release with explainable routing, confined incremental repository indexing, Ollama integration, deterministic context bundles, optional external-agent handoff, telemetry, and an optional MCP server. It is not yet a production security boundary.
+> Version 0.32 is a production-candidate pre-1.0 release with graceful draining, Prometheus-compatible metrics export, real outcome-ledger evaluation, counterfactual route explanations, private atomic state files, cross-platform worker cancellation, and the CI-enforced 104-case intelligence benchmark. It is not yet a hardened network security boundary.
 
 ## Try TGV locally
 
@@ -36,9 +36,9 @@ TGV routes by complexity, risk, privacy requirements, expected cost, and availab
 
 ## Supported versions
 
-Only the latest published minor line is supported. During the current `0.x` phase, upgrade to **0.29** for fixes. See [SECURITY.md](SECURITY.md).
+Only the latest published minor line is supported. During the current `0.x` phase, upgrade to **0.32** for fixes. See [SECURITY.md](SECURITY.md).
 
-## v0.29 capabilities
+## v0.32 capabilities
 
 - Four explainable routing profiles: `local_fast`, `local_code`, `frontier_standard`, and `frontier_deep`.
 - Provider-neutral reasoning budgets: `minimal`, `standard`, and `high`.
@@ -48,6 +48,21 @@ Only the latest published minor line is supported. During the current `0.x` phas
 - Configurable Ollama, OpenAI-compatible, and external model roles.
 - Ollama and OpenAI-compatible chat adapters with validated configuration, explicit timeouts, retries, and structured JSON output.
 - Repository-safe retrieval, deterministic context bundles, optional command handoff, telemetry, benchmarks, and an optional MCP server.
+- Strict configuration: unknown keys and malformed routing regexes fail during startup.
+- Explicit execution plans expose the selected model and capability tier for every route.
+- Repository-scoped adaptive recommendations; unverified completed outcomes are not counted as successes.
+- Cross-platform hard request deadlines for the stdio daemon using an isolated persistent worker process; timed-out workers are terminated before the timeout is returned.
+- MCP read-only mode suppresses repository-index, outcome-ledger, and telemetry persistence.
+- Ignored-directory pruning, SQLite WAL/busy-timeout hardening, bounded subprocess capture, and secret-flag redaction.
+- Worker readiness handshake plus heartbeat health checks through `tgv health`.
+- Operational status metrics for requests, routes, worker restarts, routing latency, and local-provider latency/errors.
+- Optional privacy-minimal request diagnostics JSONL for production troubleshooting.
+- Graceful daemon draining: SIGTERM/SIGINT stop accepting new work, allow an in-flight request a configurable grace period, then terminate the isolated worker if necessary.
+- Prometheus textfile export for daemon readiness, request counters, route counts, worker restarts, routing latency, and provider calls/errors.
+- Counterfactual route explanations through `tgv explain`: why the route won and what request/history change could make another route win.
+- Outcome-ledger evaluation through `tgv benchmark outcomes`, including verified success, human acceptance, rework, safety, retry, latency, and cost summaries by model/tier/category.
+- Atomic owner-only operational files for status, metrics, indexes, telemetry, and context bundles on POSIX-compatible filesystems.
+- 104-case integrated intelligence benchmark with a CI-enforced release-quality gate.
 
 ## Architecture
 
@@ -86,6 +101,7 @@ cp config/tgv.example.yaml tgv.yaml
 tgv doctor --config tgv.yaml
 tgv inspect .
 tgv route "Where is authentication configured?" --repo .
+tgv explain "Fix refresh-token rotation" --repo .
 tgv prepare "Fix refresh-token rotation" --repo . --output .tgv/bundles/auth
 ```
 
@@ -139,12 +155,14 @@ Example Claude-style registration:
 }
 ```
 
-The v0.29 server exposes read-only tools:
+The v0.32 server exposes read-only tools:
 
 - `list_repository_files`
 - `search_repository`
 - `read_file_excerpt`
 - `prepare_context_bundle`
+
+MCP uses an explicit read-only service mode: these tools do not persist `.tgv/index.json`, outcome records, or telemetry.
 
 ## Development
 
@@ -195,8 +213,9 @@ telemetry:
 ```
 
 Each recorded interaction contains the request text and routing metadata: route,
-confidence, matched category and pattern, rationale, and risk signals. TGV explicitly
-excludes repository file contents, excerpts, context bundles, and secrets from telemetry.
+confidence, matched category and pattern, rationale, and risk signals. TGV does not add
+repository file contents, excerpts, or context bundles to telemetry, but request text can
+itself contain sensitive data; keep telemetry disabled unless that retention is acceptable.
 
 Install the optional TER integration before scoring sessions:
 
@@ -248,16 +267,39 @@ result remains semantically equivalent, but comments and key ordering may change
 
 ```bash
 tgv route "Where is authentication configured?" --explain
+tgv explain "Implement token rotation safely" --repo .
 tgv doctor --config config/tgv.example.yaml
 ```
 
-Explain output includes the active confidence thresholds, deterministic/model decision source, matched policy, and risk signals. `doctor` reports configuration status, Ollama availability, the configured fast model, telemetry state, and only the count of deny patterns.
+`tgv route --explain` exposes the raw routing evidence. `tgv explain` adds a human-oriented counterfactual trace: the strongest reasons for the selected route and estimated changes that would make each alternative route win. Explain output also includes the decision source, selected model/capability tier, task profile, historical evidence, matched policy, and risk signals. `doctor` reports configuration status, provider availability, the configured fast model, telemetry state, and only the count of deny patterns.
 
-Repository search is currently a bounded full scan. A postings-based index is planned; path containment, file-size limits, deny patterns, and result limits remain enforced.
+Repository search uses a bounded incremental lexical/AST index. Ignored directories are pruned before descent, while path containment, file-size limits, deny patterns, and result limits remain enforced.
 
 When `tgv calibrate --apply` writes YAML, it serializes the validated configuration model. Key order and comments may therefore change. Dry-run remains the default.
 
-## 0.29 production hardening
+## 0.32 operational readiness
+
+Run the stdio gateway with heartbeat status and privacy-minimal diagnostics:
+
+```bash
+tgv serve --repo . \
+  --status-file .tgv/status.json \
+  --diagnostics-file .tgv/diagnostics.jsonl \
+  --metrics-file .tgv/tgv.prom \
+  --request-timeout 120 \
+  --shutdown-grace-seconds 10
+
+tgv health --status-file .tgv/status.json --max-age 15 --json
+tgv metrics --status-file .tgv/status.json --format prometheus
+```
+
+The daemon starts one isolated routing worker with the cross-platform `spawn` lifecycle. It reports readiness only after the worker startup handshake completes. A timed-out request terminates the worker before returning the timeout; the next request starts a clean worker. SIGTERM/SIGINT moves readiness to draining, stops accepting new requests, gives the in-flight request the configured grace period, then terminates it if necessary. Status and optional Prometheus textfile metrics include request counters, cancellations, route counts, worker restarts, and bounded routing/provider latency/error metrics. See `docs/operations.md` for deployment guidance and limitations.
+
+The integrated routing-intelligence corpus now contains 104 labeled cases across all 13 task categories. `tgv benchmark run --enforce --json` is a CI release gate requiring at least 100 cases, 90% category accuracy, 90% complexity-band accuracy, 95% acceptable-route accuracy, and zero false-low-risk cases.
+
+For observed production evidence, `tgv benchmark outcomes --repo . --json` evaluates the privacy-minimal outcome ledger instead of synthetic labels. `--enforce` can require a minimum verified sample count, minimum verified success rate, and maximum safety-violation rate. An empty or undersampled ledger is reported as insufficient evidence rather than treated as success.
+
+## 0.30 production hardening
 
 TGV works offline by default. Repository search uses a local incremental lexical index and falls back to a bounded scan if indexing fails. Common secret-bearing files are denied by default.
 
@@ -271,13 +313,15 @@ tgv prepare "Fix the parser" --repo . --output .tgv/handoff --mode command --dry
 For command mode, configure an argument array; placeholders `{handoff_markdown}` and `{bundle_json}` are expanded without shell interpolation. TGV reduces accidental exposure but is not a full security boundary.
 
 
-## 0.29 quality and security hardening
+## 0.30 quality and security hardening
 
-TGV 0.29 enforces repository-root confinement for user paths, symlinks, and index files; includes a real loopback Ollama adapter integration test; and raises the branch-aware coverage gate to 98%. Run `PYTHONPATH=src python scripts/bench_efficiency.py --repo .` for a deterministic local estimate of frontier-token and cost savings. See `docs/dependency-audit.md` for audit scope and limitations. TGV reduces accidental disclosure risk but is not a complete security boundary.
+TGV 0.30 keeps repository-root confinement and the 98% branch-aware coverage gate, while adding strict configuration, real stdio deadlines, read-only MCP persistence rules, bounded subprocess output, secret-flag redaction, and repository-pruned enumeration. Run `PYTHONPATH=src python scripts/bench_efficiency.py --repo .` for deterministic local routing/token-allocation proxy metrics; these are not measured counterfactual savings. See `docs/dependency-audit.md` for audit scope and limitations. TGV reduces accidental disclosure risk but is not a complete security boundary.
 
 ### Quality diagnostics
 
-- `tgv bench routing [--json]` evaluates the committed 76-case labeled routing corpus.
+- `tgv bench routing [--json]` evaluates the committed 76-case low-level deterministic routing corpus.
+- `tgv benchmark run --enforce [--json]` evaluates the 104-case integrated task-category/complexity/routing corpus and enforces the release gate.
+- `tgv benchmark outcomes --repo . [--enforce] [--json]` evaluates actual privacy-minimal outcome records by model, capability tier, and task category.
 - `tgv bench index --repo . [--query QUERY] [--json]` reports index size, symbols, cache behavior, and latency.
 - `python scripts/check_version.py` verifies release-version consistency.
 
@@ -299,14 +343,16 @@ routing weights. No behavioral changes; all 62+ tests still pass at 99% coverage
 
 ## Routing Intelligence and Evaluation
 
-TGV 0.29 adds two-stage task profiling, bounded lexical/structural retrieval, a privacy-minimal SQLite outcome ledger, and a statistically guarded model-routing scoreboard. Historical recommendations activate only after the configured minimum sample count; otherwise TGV reports the evidence gap and keeps the deterministic route. Mandatory safety escalation always wins.
+TGV 0.32 uses two-stage task profiling, bounded lexical/structural retrieval, a privacy-minimal SQLite outcome ledger, and a statistically guarded model-routing scoreboard. Historical recommendations are scoped to the current repository, activate only after the configured minimum sample count, and now expose/apply the recommended model in the route execution plan. Unverified completed outcomes are not treated as successful evidence. Mandatory safety escalation always wins.
 
 ```bash
 tgv profile "Fix refresh-token rotation" --repo . --json
 tgv retrieve "AuthenticationService" --repo . --json
 tgv scoreboard "Fix refresh-token rotation" --repo . --json
+tgv explain "Fix refresh-token rotation" --repo .
 tgv outcomes list --repo .
-tgv benchmark run --json
+tgv benchmark run --enforce --json
+tgv benchmark outcomes --repo . --json
 ```
 
 See `docs/routing-intelligence.md` for formulas, privacy behavior, architecture, limitations, and configuration.

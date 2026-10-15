@@ -17,26 +17,34 @@ _CATEGORY_PATTERNS: tuple[tuple[TaskCategory, re.Pattern[str]], ...] = (
     (
         TaskCategory.SECURITY,
         re.compile(
-            r"\b(auth(?:entication|orization)?|permission|credentials?|secret|security|vulnerab\w*|exploit|csrf|xss)\b",
+            r"\b(auth(?:entication|orization)?|permission|credentials?|secret|security|"
+            r"vulnerab\w*|exploit|csrf|xss)\b",
             re.I,
         ),
     ),
     (
         TaskCategory.ARCHITECTURE,
-        re.compile(r"\b(architect|microservice|redesign|migration|interface|distributed)\b", re.I),
+        re.compile(
+            r"\b(architect\w*|microservices?|redesign|migrat\w*|interfaces?|"
+            r"distributed|public api|schema)\b",
+            re.I,
+        ),
     ),
     (
         TaskCategory.DEPENDENCY_CHANGE,
-        re.compile(r"\b(dependenc|upgrade|downgrade|package|lockfile|pyproject)\b", re.I),
+        re.compile(r"\b(dependenc\w*|upgrade|downgrade|package|lockfile|pyproject)\b", re.I),
     ),
     (
         TaskCategory.PERFORMANCE,
-        re.compile(r"\b(performance|latency|throughput|benchmark|optimi[sz]|memory)\b", re.I),
+        re.compile(r"\b(performance|latency|throughput|benchmark|optimi[sz]\w*|memory)\b", re.I),
     ),
-    (TaskCategory.TESTING, re.compile(r"\b(test|coverage|fixture|pytest|assertion)\b", re.I)),
+    (
+        TaskCategory.TESTING,
+        re.compile(r"\b(tests?|testing|coverage|fixtures?|pytest|assertions?)\b", re.I),
+    ),
     (
         TaskCategory.REFACTOR,
-        re.compile(r"\b(refactor|restructure|cleanup|extract|rename across)\b", re.I),
+        re.compile(r"\b(refactor\w*|restructure|cleanup|extract|rename across)\b", re.I),
     ),
     (
         TaskCategory.BUG_FIX,
@@ -48,7 +56,7 @@ _CATEGORY_PATTERNS: tuple[tuple[TaskCategory, re.Pattern[str]], ...] = (
     ),
     (
         TaskCategory.DOCUMENTATION,
-        re.compile(r"\b(readme|documentation|docs?|changelog|comment)\b", re.I),
+        re.compile(r"\b(readme|document(?:ation)?|docs?|changelog|comments?)\b", re.I),
     ),
     (TaskCategory.FORMATTING, re.compile(r"\b(format|whitespace|style|lint-only|typo)\b", re.I)),
     (
@@ -142,7 +150,27 @@ class TaskProfiler:
         complexity = sum(
             dimensions[key] * self.config.complexity_weights.get(key, 0.0) for key in dimensions
         )
-        complexity = max(complexity, security_score * 0.75, architecture_score * 0.65)
+        category_floor = {
+            TaskCategory.DOCUMENTATION: 18.0,
+            TaskCategory.FORMATTING: 15.0,
+            TaskCategory.SMALL_EDIT: 22.0,
+            TaskCategory.REPOSITORY_INVESTIGATION: 20.0,
+            TaskCategory.TESTING: 35.0,
+            TaskCategory.BUG_FIX: 40.0,
+            TaskCategory.REFACTOR: 42.0,
+            TaskCategory.FEATURE: 45.0,
+            TaskCategory.DEPENDENCY_CHANGE: 42.0,
+            TaskCategory.PERFORMANCE: 45.0,
+            TaskCategory.ARCHITECTURE: 72.0,
+            TaskCategory.SECURITY: 75.0,
+            TaskCategory.UNKNOWN: 40.0,
+        }[category]
+        complexity = max(
+            complexity,
+            category_floor,
+            security_score * 0.82,
+            architecture_score * 0.82,
+        )
         confidence = min(0.95, category_confidence + min(len(evidence), 5) * 0.04)
 
         risks: list[str] = []
@@ -182,6 +210,27 @@ class TaskProfiler:
 
     @staticmethod
     def _category(request: str) -> tuple[TaskCategory, float]:
+        if re.search(r"\b(maybe|possibly|unclear|unknown|unsure|not sure|might)\b", request, re.I):
+            return TaskCategory.UNKNOWN, 0.42
+        if re.search(r"\b(upgrade|downgrade|dependenc\w*)\b", request, re.I):
+            return TaskCategory.DEPENDENCY_CHANGE, 0.86
+        if re.search(r"\b(find|locate|where|which file|inspect)\b", request, re.I):
+            return TaskCategory.REPOSITORY_INVESTIGATION, 0.84
+        if re.search(r"\b(refactor\w*|restructure|extract)\b", request, re.I):
+            return TaskCategory.REFACTOR, 0.84
+        documentation = bool(
+            re.search(r"\b(readme|document(?:ation)?|docs?|changelog|comments?)\b", request, re.I)
+        )
+        formatting = bool(
+            re.search(
+                r"\b(format(?:ting)?|whitespace|indentation|trailing whitespace|typo|"
+                r"line wrapping)\b",
+                request,
+                re.I,
+            )
+        )
+        if formatting and not documentation:
+            return TaskCategory.FORMATTING, 0.84
         matches = [category for category, pattern in _CATEGORY_PATTERNS if pattern.search(request)]
         if matches:
             return matches[0], 0.78 if len(matches) == 1 else 0.66

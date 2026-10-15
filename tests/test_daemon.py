@@ -2,21 +2,26 @@ import io
 import json
 import time
 
-from tgv.daemon import _atomic_status, serve
+import pytest
+
+from tgv.daemon import _atomic_status, _route_with_timeout, serve
 from tgv.models import Route, RouteDecision
 
 
 class FakeService:
     def route(self, request: str) -> RouteDecision:
-        if request == "slow":
-            return RouteDecision(route=Route.LOCAL_FAST, confidence=1, rationale="ok")
         return RouteDecision(route=Route.LOCAL_FAST, confidence=1, rationale="ok")
 
 
-class BlockingService(FakeService):
+class SlowService:
     def route(self, request: str) -> RouteDecision:
-        time.sleep(1)
-        return super().route(request)
+        time.sleep(0.08)
+        return RouteDecision(route=Route.LOCAL_FAST, confidence=1, rationale="late")
+
+
+class BrokenService:
+    def route(self, request: str) -> RouteDecision:
+        raise ValueError("broken route")
 
 
 def test_atomic_status_and_sequential_serve(tmp_path) -> None:
@@ -46,15 +51,30 @@ def test_atomic_status_and_sequential_serve(tmp_path) -> None:
     assert status["last_request_at"]
 
 
-def test_serve_timeout_interrupts_blocking_request() -> None:
+def test_serve_timeout_interrupts_slow_route() -> None:
     stdout = io.StringIO()
     started = time.monotonic()
     serve(
-        BlockingService(),  # type: ignore[arg-type]
-        timeout_seconds=0.1,
+        SlowService(),  # type: ignore[arg-type]
+        timeout_seconds=0.01,
         input_stream=io.StringIO('{"request":"slow"}\n'),
         output_stream=stdout,
         error_stream=io.StringIO(),
     )
-    assert time.monotonic() - started < 0.9
+    elapsed = time.monotonic() - started
     assert "exceeded" in json.loads(stdout.getvalue())["error"]
+    assert elapsed < 0.07
+
+
+def test_route_timeout_nonpositive_and_thread_fallback(monkeypatch) -> None:
+    with pytest.raises(ValueError, match="greater than zero"):
+        _route_with_timeout(FakeService(), "x", 0)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("tgv.daemon.current_thread", lambda: object())
+    monkeypatch.setattr("tgv.daemon.main_thread", lambda: object())
+    result = _route_with_timeout(FakeService(), "x", 1)  # type: ignore[arg-type]
+    assert result.route == Route.LOCAL_FAST
+    with pytest.raises(ValueError, match="broken route"):
+        _route_with_timeout(BrokenService(), "x", 1)  # type: ignore[arg-type]
+    with pytest.raises(TimeoutError, match="exceeded"):
+        _route_with_timeout(SlowService(), "x", 0.001)  # type: ignore[arg-type]

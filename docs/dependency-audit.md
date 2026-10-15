@@ -1,14 +1,14 @@
 # Dependency audit
 
-## TGV 0.29
+## TGV 0.32
 
-The release environment could not install `pip-audit` because its configured package index returned no distributions. The available environment check, `python -m pip check`, reported one environment-level conflict unrelated to TGV: installed `moviepy 2.2.1` requires Pillow `<12`, while the shared sandbox has Pillow `12.2.0`. TGV does not depend on either package, so no TGV dependency change is warranted.
+The local preparation environment does not have `pip-audit`, Ruff, or mypy executables installed, so this archive does not claim those checks were executed locally. The CI workflow remains the authoritative network-enabled dependency and static-analysis gate.
 
 CI should run the following authoritative audit in a network-enabled environment:
 
 ```bash
-python -m pip install -e '.[dev]'
+python -m pip install -e '.[dev,mcp]'
 pip-audit
 ```
 
-TGV directly depends on bounded major versions of `httpx`, `pydantic`, and `PyYAML`. Optional MCP and TER dependencies remain opt-in. A successful dependency audit is a release responsibility; absence of a finding in this document is not a security guarantee.
+TGV directly depends on bounded major versions of `httpx`, `pydantic`, `PyYAML`, and `tqdm`. Optional MCP and TER dependencies remain opt-in. A successful dependency audit is a release responsibility; absence of a finding in this document is not a security guarantee.
