@@ -98,7 +98,8 @@ class PatternConfig(StrictConfigModel):
     code: str = (
         r"\b(add|fix|implement|refactor|write "
         r"(?:focused |regression |integration |end-to-end )?tests?|change|patch|debug|"
-        r"optimi[sz]e|upgrade|downgrade|update (?=[^\n]{0,60}\b(?:dependenc\w*|lockfile|package|pyproject|pytest|ruff|mypy|mcp)\b)|extract|restructure|support|reduce|benchmark|"
+        r"optimi[sz]e|upgrade|downgrade|update (?=[^\n]{0,60}\b(?:dependenc\w*|lockfile|package|"
+        r"pyproject|pytest|ruff|mypy|mcp)\b)|extract|restructure|support|reduce|benchmark|"
         r"improve (?=[^\n]{0,60}\b(?:latency|throughput|performance|memory|startup)\b))\b"
     )
     simple: str = r"\b(where|which file|explain|summari[sz]e|find|locate|inspect|what is)\b"
@@ -106,7 +107,7 @@ class PatternConfig(StrictConfigModel):
     @field_validator("code", "simple")
     @classmethod
     def validate_pattern(cls, value: str, info: ValidationInfo) -> str:
-        return _validate_regex(value, field_name=info.field_name)
+        return _validate_regex(value, field_name=info.field_name or "pattern")
 
     @field_validator("high_risk")
     @classmethod

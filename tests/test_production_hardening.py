@@ -147,9 +147,9 @@ def test_command_provider_validation_and_failures(
         provider.invoke(str(tmp_path / "h.md"), str(tmp_path / "b.json"))
 
     with pytest.raises(CommandExecutionError, match="timed out"):
-        CommandHandoffProvider(
-            [sys.executable, "-c", "import time; time.sleep(1)"], 0.01
-        ).invoke("h", "j")
+        CommandHandoffProvider([sys.executable, "-c", "import time; time.sleep(1)"], 0.01).invoke(
+            "h", "j"
+        )
 
     with pytest.raises(CommandExecutionError, match="exit code 3"):
         CommandHandoffProvider(

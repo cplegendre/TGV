@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from pydantic import ValidationError
@@ -20,12 +21,13 @@ def _construct_unique_mapping(
     loader: _UniqueKeyLoader, node: MappingNode, deep: bool = False
 ) -> dict[object, object]:
     mapping: dict[object, object] = {}
+    construct = cast(Callable[..., object], loader.construct_object)
     for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
+        key = construct(key_node, deep=deep)
         if key in mapping:
             line = key_node.start_mark.line + 1
             raise ConfigurationError(f"Duplicate configuration key {key!r} at line {line}")
-        mapping[key] = loader.construct_object(value_node, deep=deep)
+        mapping[key] = construct(value_node, deep=deep)
     return mapping
 
 

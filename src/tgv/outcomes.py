@@ -8,7 +8,7 @@ import os
 import sqlite3
 import uuid
 from collections.abc import Iterable
-from contextlib import closing
+from contextlib import closing, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -28,10 +28,8 @@ class OutcomeLedger:
     def _connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=5.0)
-        try:
+        with suppress(OSError):
             os.chmod(self.path, 0o600)
-        except OSError:
-            pass
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout = 5000")
         connection.execute("PRAGMA journal_mode = WAL")

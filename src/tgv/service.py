@@ -172,9 +172,7 @@ class TGVService:
                     scoreboard.recommended_model if source == "scoreboard" else None
                 ),
                 "selected_capability_tier": (
-                    scoreboard.recommended_capability_tier
-                    if source == "scoreboard"
-                    else None
+                    scoreboard.recommended_capability_tier if source == "scoreboard" else None
                 ),
                 "decision_source": source,
                 "rationale": rationale,
