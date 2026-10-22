@@ -50,18 +50,11 @@ def test_efficiency_cli_json(
     assert output["local_fast"]["aggregate_ter"] == 0.8
 
 
-def test_efficiency_missing_extra_is_actionable(monkeypatch: pytest.MonkeyPatch) -> None:
-    import builtins
-
+def test_efficiency_missing_ter_executable_is_actionable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from tgv.efficiency import TERUnavailableError, _ter_analyzer
 
-    original_import = builtins.__import__
-
-    def blocked_import(name: str, *args: object, **kwargs: object) -> object:
-        if name.startswith("ter_calculator"):
-            raise ImportError("missing")
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", blocked_import)
+    monkeypatch.setattr("tgv.efficiency.shutil.which", lambda _: None)
     with pytest.raises(TERUnavailableError, match="tgv-agent\\[ter\\]"):
         _ter_analyzer()

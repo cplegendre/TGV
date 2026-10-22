@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
+import shutil
+import subprocess
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,6 +17,14 @@ class TERUnavailableError(TGVError):
     """Raised when the optional TER integration is requested but unavailable."""
 
 
+class TERAnalysisError(TGVError):
+    """Raised when the TER CLI cannot produce a valid analysis."""
+
+
+DEFAULT_TER_TIMEOUT_SECONDS = 300.0
+_MAX_ERROR_EXCERPT = 500
+
+
 @dataclass(frozen=True)
 class ScoredSession:
     route: str
@@ -22,16 +33,101 @@ class ScoredSession:
     waste_tokens: int
 
 
-def _ter_analyzer() -> Callable[[Path], Any]:
-    try:
-        from ter_calculator.analyze_pipeline import analyze_session, default_analyze_args
-    except ImportError as exc:
-        raise TERUnavailableError(
-            "TER support is not installed. Install it with: pip install 'tgv-agent[ter]'"
-        ) from exc
+@dataclass(frozen=True)
+class TERAnalysis:
+    """The subset of TER's documented JSON output that TGV consumes."""
 
-    def analyze(path: Path) -> Any:
-        return analyze_session(default_analyze_args(str(path)))
+    aggregate_ter: float
+    aligned_tokens: int
+    waste_tokens: int
+
+
+def _resolve_ter_executable() -> str:
+    executable = shutil.which("ter")
+    if executable is None:
+        raise TERUnavailableError(
+            "TER CLI executable 'ter' was not found. Install it with: pip install 'tgv-agent[ter]'"
+        )
+    return executable
+
+
+def _bounded_excerpt(value: str, *, limit: int = _MAX_ERROR_EXCERPT) -> str:
+    compact = " ".join(value.split())
+    if not compact:
+        return "<no diagnostic output>"
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit] + "..."
+
+
+def _required_finite_number(payload: dict[str, Any], field: str) -> float:
+    value = payload.get(field)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TERAnalysisError(f"TER JSON field {field!r} must be a number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise TERAnalysisError(f"TER JSON field {field!r} must be finite")
+    return number
+
+
+def _required_nonnegative_int(payload: dict[str, Any], field: str) -> int:
+    value = payload.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise TERAnalysisError(f"TER JSON field {field!r} must be a non-negative integer")
+    return value
+
+
+def _parse_ter_payload(stdout: str, path: Path) -> TERAnalysis:
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise TERAnalysisError(f"TER returned invalid JSON for {path}: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise TERAnalysisError(f"TER returned a non-object JSON payload for {path}")
+    return TERAnalysis(
+        aggregate_ter=_required_finite_number(payload, "aggregate_ter"),
+        aligned_tokens=_required_nonnegative_int(payload, "aligned_tokens"),
+        waste_tokens=_required_nonnegative_int(payload, "waste_tokens"),
+    )
+
+
+def _run_ter_analysis(executable: str, path: Path, timeout: float) -> TERAnalysis:
+    command = [executable, "analyze", str(path.resolve()), "--format", "json"]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise TERUnavailableError(
+            "TER CLI executable was not found. Install it with: pip install 'tgv-agent[ter]'"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise TERAnalysisError(
+            f"TER analysis timed out after {timeout:g} seconds for {path}"
+        ) from exc
+    except OSError as exc:
+        raise TERAnalysisError(f"TER analysis could not start for {path}: {exc}") from exc
+    if completed.returncode != 0:
+        detail = _bounded_excerpt(completed.stderr or completed.stdout)
+        raise TERAnalysisError(
+            f"TER analysis failed for {path} with exit code {completed.returncode}: {detail}"
+        )
+    return _parse_ter_payload(completed.stdout, path)
+
+
+def _ter_analyzer(
+    *, executable: str | None = None, timeout: float = DEFAULT_TER_TIMEOUT_SECONDS
+) -> Callable[[Path], TERAnalysis]:
+    resolved = executable or _resolve_ter_executable()
+
+    def analyze(path: Path) -> TERAnalysis:
+        return _run_ter_analysis(resolved, path, timeout)
 
     return analyze
 

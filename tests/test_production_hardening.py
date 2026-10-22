@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -240,19 +239,13 @@ def test_cli_efficiency_nonempty_text(
 
 
 def test_optional_ter_analyzer_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    import types
+    from tgv.efficiency import TERAnalysis, _ter_analyzer
 
-    module = types.ModuleType("ter_calculator.analyze_pipeline")
-    module.default_analyze_args = lambda path: {"path": path}  # type: ignore[attr-defined]
-    module.analyze_session = lambda args: SimpleNamespace(
-        aggregate_ter=1, aligned_tokens=1, waste_tokens=0
-    )  # type: ignore[attr-defined]
-    package = types.ModuleType("ter_calculator")
-    monkeypatch.setitem(sys.modules, "ter_calculator", package)
-    monkeypatch.setitem(sys.modules, "ter_calculator.analyze_pipeline", module)
-    from tgv.efficiency import _ter_analyzer
-
-    result = _ter_analyzer()(tmp_path / "x.jsonl")
+    monkeypatch.setattr(
+        "tgv.efficiency._run_ter_analysis",
+        lambda executable, path, timeout: TERAnalysis(1, 1, 0),
+    )
+    result = _ter_analyzer(executable="fake-ter")(tmp_path / "x.jsonl")
     assert result.aligned_tokens == 1
 
 
