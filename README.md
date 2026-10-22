@@ -361,6 +361,8 @@ tgv retrieve "AuthenticationService" --repo . --json
 tgv scoreboard "Fix refresh-token rotation" --repo . --json
 tgv explain "Fix refresh-token rotation" --repo .
 tgv outcomes list --repo .
+tgv outcomes link TASK_ID --session ~/.claude/projects/<project>/<session>.jsonl --agent claude-code --repo .
+tgv outcomes validate TASK_ID --tests-passed --static-checks-passed --repo .
 tgv benchmark run --enforce --json
 tgv benchmark outcomes --repo . --json
 ```

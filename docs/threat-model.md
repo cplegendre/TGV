@@ -33,6 +33,10 @@ Operational state can reveal repository paths, route choices, model identifiers,
 
 Multiple local processes can contend on the SQLite outcome ledger. TGV uses WAL mode and a busy timeout to reduce transient writer contention. This is not a substitute for a network database if high write concurrency becomes a requirement.
 
+### External agent-session linking
+
+`tgv outcomes link` accepts an explicit session path because real coding-agent transcripts often live outside the repository. TGV rejects missing paths, directories, final symlinks, non-regular files, oversized files, malformed records, missing or inconsistent session identifiers, repository mismatches, and conflicting or changed links. It stores only the agent name, external session identifier, SHA-256 content hash, attempt correlation, and timestamps. It never stores the absolute session path or raw transcript contents. TGV does not discover sessions or scan home directories, and it validates only documented session formats.
+
 ### Malicious MCP clients
 
 The v0.32 MCP surface is read-only. It does not expose shell execution or repository-source writes, and MCP service mode suppresses index, outcome, and telemetry persistence. Deployments should use stdio for single-user local use and authenticate any future network transport.

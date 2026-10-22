@@ -309,6 +309,25 @@ class OutcomeLedger:
                 ("escalated" if escalated else "retrying", task_id),
             )
 
+    def task_repository_id(self, task_id: str) -> str:
+        """Return the repository identity recorded for an existing task."""
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT repository_id FROM outcomes WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown task id: {task_id}")
+        return str(row["repository_id"])
+
+    def agent_session(self, agent: str, external_session_id: str) -> AgentSessionLink | None:
+        """Return an existing external session link, if this agent/session is known."""
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT * FROM agent_sessions WHERE agent = ? AND external_session_id = ?",
+                (agent.strip(), external_session_id.strip()),
+            ).fetchone()
+        return None if row is None else self._row_to_session_link(row)
+
     def routing_decision_id_for(self, task_id: str) -> str | None:
         """Return the durable routing-decision identifier for a task, if any."""
         with closing(self._connect()) as connection, connection:

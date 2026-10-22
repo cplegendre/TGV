@@ -51,12 +51,60 @@ integration succeeds.
 Use `tgv efficiency --sessions PATH` to score sessions that TGV accepts.
 Missing executables, invalid TER JSON, and execution failures produce TGV errors.
 
+## Link a real agent session to a task
+
+TGV can durably associate an explicit agent-session file with an existing outcome task and
+execution attempt. Linking is a metadata operation; it does not run TER.
+
+```bash
+tgv outcomes link TASK_ID \
+  --session ~/.claude/projects/<project>/<session>.jsonl \
+  --agent claude-code \
+  --repo .
+```
+
+The command validates that the task belongs to the current repository, rejects missing files,
+directories, symbolic links, oversized files, and malformed session records, and verifies that
+the session contains a consistent session identifier with at least one user and one assistant
+message. It stores only the agent name, the external session identifier, the SHA-256 content
+hash, the attempt link, and timestamps. The absolute path and raw session contents are never
+stored. Repeating an identical link is idempotent; conflicting links and changed content are
+rejected.
+
+The first link reuses an existing empty attempt or creates one. Linking a different session to a
+task that already has a linked attempt creates the next attempt. Use `--attempt ATTEMPT_ID` to
+target an existing attempt explicitly. TGV never discovers sessions automatically and never scans
+developer home directories.
+
+### Supported session formats
+
+- `claude-code`: JSONL records with `type` set to `user` or `assistant`, a `message` object, and a
+  consistent `sessionId`. This is the format parsed by TER 3.0.0.
+
+Codex exposes a current session identifier through hooks and a transcript path, but official
+OpenAI documentation does not define a stable transcript-file schema. TGV therefore does not
+validate or link Codex transcript files yet. Adding a future format requires a documented schema
+and agent-specific validation tests.
+
+## Record validation evidence
+
+```bash
+tgv outcomes validate TASK_ID --tests-passed --static-checks-passed --repo .
+tgv outcomes validate TASK_ID --tests-failed --repo .
+```
+
+Positive and negative evidence can be recorded independently. Contradictory flags are rejected.
+Validation evidence uses the existing outcome semantics: a completed task with no tests, static
+checks, or human feedback remains unverified. Task completion and human acceptance commands are
+unchanged.
+
 ## Interpret results carefully
 
 TGV's built-in telemetry records request text and a **synthetic routing reply**,
 not the downstream coding agent's full session. Running TER on this telemetry
 measures the synthetic messages, **not real coding-agent execution efficiency**.
-A task-to-agent-session correlation workflow is not part of this packaging change.
+Linking a real session records durable metadata only; TER scoring of linked
+sessions is not implemented in this change.
 Do not treat synthetic TER scores as execution efficiency, verified correctness,
 or proven token savings. Historical threshold calibration based on synthetic
 telemetry has the same limitation.
@@ -80,6 +128,6 @@ keeps only aggregate values and does not need detailed span content.
 ## Scope
 
 This integration documents the pinned TER 3.0.0 CLI contract and fixes optional
-installation requirements. It does not implement durable session attribution,
-verified outcomes, routing algorithm updates, or compatibility with an
-unverified TER 4 API.
+installation requirements. It also documents TGV's explicit metadata-only session linking and
+validation-evidence commands. It does not run TER during linking, implement TER scoring or linked
+efficiency reports, update routing algorithms, or support an unverified TER 4 API.

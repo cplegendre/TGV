@@ -27,6 +27,11 @@ from tgv.exceptions import (
 from tgv.models import HandoffMode
 from tgv.providers import OllamaProvider, OpenAICompatibleProvider
 from tgv.service import TGVService
+from tgv.session_linking import (
+    ensure_task_repository,
+    link_session_to_task,
+    supported_agents,
+)
 
 
 def _path(value: str) -> Path:
@@ -143,13 +148,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     outcomes = sub.add_parser(
         "outcomes",
-        help="Inspect, export, or complete outcomes (adaptive learning is experimental)",
+        help="Inspect, export, complete, link, or validate outcomes "
+        "(adaptive learning is experimental)",
     )
-    outcomes.add_argument("action", choices=("list", "export", "complete"))
+    outcomes.add_argument("action", choices=("list", "export", "complete", "link", "validate"))
     outcomes.add_argument("task_id", nargs="?")
     feedback = outcomes.add_mutually_exclusive_group()
     feedback.add_argument("--accepted", action="store_true")
     feedback.add_argument("--rejected", action="store_true")
+    outcomes.add_argument("--session", type=_path, help="External agent session file to link")
+    outcomes.add_argument(
+        "--agent",
+        choices=supported_agents(),
+        help="Agent-session format of --session",
+    )
+    outcomes.add_argument("--attempt", help="Existing execution attempt id to link the session to")
+    tests = outcomes.add_mutually_exclusive_group()
+    tests.add_argument("--tests-passed", action="store_true")
+    tests.add_argument("--tests-failed", action="store_true")
+    static_checks = outcomes.add_mutually_exclusive_group()
+    static_checks.add_argument("--static-checks-passed", action="store_true")
+    static_checks.add_argument("--static-checks-failed", action="store_true")
     outcomes.add_argument("--repo", type=_path, default=Path.cwd())
     outcomes.add_argument("--config", type=_path)
     outcomes.add_argument("--format", choices=("json", "csv"), default="json")
@@ -530,6 +549,67 @@ def main(argv: list[str] | None = None) -> None:
                     print(
                         json.dumps(
                             {"task_id": args.task_id, "completed": True, "accepted": accepted}
+                        )
+                    )
+                elif args.action == "link":
+                    if not args.task_id or args.session is None or not args.agent:
+                        raise TGVError(
+                            "outcomes link requires TASK_ID, --session PATH, and --agent AGENT"
+                        )
+                    result = link_session_to_task(
+                        service.outcomes,
+                        args.task_id,
+                        repository_root=service.repository.root,
+                        session_path=args.session,
+                        agent=args.agent,
+                        attempt_id=args.attempt,
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "task_id": result.task_id,
+                                "attempt_id": result.attempt.attempt_id,
+                                "attempt_number": result.attempt.attempt_number,
+                                "session_link_id": result.link.session_link_id,
+                                "agent": result.link.agent,
+                                "external_session_id": result.link.external_session_id,
+                                "content_hash": result.link.content_hash,
+                                "linked_at": result.link.linked_at.isoformat(),
+                                "created": result.created,
+                            }
+                        )
+                    )
+                elif args.action == "validate":
+                    if not args.task_id:
+                        raise TGVError("outcomes validate requires TASK_ID")
+                    tests_passed = (
+                        True if args.tests_passed else False if args.tests_failed else None
+                    )
+                    static_passed = (
+                        True
+                        if args.static_checks_passed
+                        else False
+                        if args.static_checks_failed
+                        else None
+                    )
+                    if tests_passed is None and static_passed is None:
+                        raise TGVError(
+                            "outcomes validate requires --tests-passed/--tests-failed "
+                            "and/or --static-checks-passed/--static-checks-failed"
+                        )
+                    ensure_task_repository(service.outcomes, args.task_id, service.repository.root)
+                    service.outcomes.record_validation(
+                        args.task_id,
+                        tests_passed=tests_passed,
+                        static_checks_passed=static_passed,
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "task_id": args.task_id,
+                                "tests_passed": tests_passed,
+                                "static_checks_passed": static_passed,
+                            }
                         )
                     )
                 else:
