@@ -183,9 +183,7 @@ def test_demo_rejects_non_positive_task_count(tmp_path: Path) -> None:
 
 
 def test_demo_expands_canonical_tasks_deterministically() -> None:
-    canonical = [
-        {"id": "one", "request": "Summarize this module", "expected_route": "local_fast"}
-    ]
+    canonical = [{"id": "one", "request": "Summarize this module", "expected_route": "local_fast"}]
     assert _expanded_task(canonical, 0) == canonical[0]
     assert _expanded_task(canonical, 1) == {
         "id": "one--variant-00001",

@@ -40,12 +40,8 @@ def _seed_successes(service: TGVService, root: Path, model: str, count: int = 5)
             context_token_estimate=8,
         )
         service.outcomes.record_execution(task_id, status="completed", latency_seconds=0.1)
-        service.outcomes.record_validation(
-            task_id, tests_passed=True, static_checks_passed=True
-        )
-        service.outcomes.record_human_feedback(
-            task_id, accepted=True, rework_required=False
-        )
+        service.outcomes.record_validation(task_id, tests_passed=True, static_checks_passed=True)
+        service.outcomes.record_human_feedback(task_id, accepted=True, rework_required=False)
 
 
 def test_config_rejects_unknown_keys_and_invalid_regex(tmp_path: Path) -> None:
@@ -70,7 +66,7 @@ def test_config_rejects_unknown_keys_and_invalid_regex(tmp_path: Path) -> None:
         'version: 1\nmodels: {}\nrouting:\n  patterns:\n    high_risk:\n      bad: "("\n',
         encoding="utf-8",
     )
-    with pytest.raises(ConfigurationError, match="high_risk.bad"):
+    with pytest.raises(ConfigurationError, match=r"high_risk\.bad"):
         load_config(high_risk)
 
 
@@ -147,9 +143,7 @@ def test_unverified_completed_outcome_is_not_counted_as_success(tmp_path: Path) 
     record = service.outcomes.query(model="unverified", limit=1)[0]
     assert service.scoreboard._success(record) == 0
     assert service.scoreboard._success(record.model_copy(update={"tests_passed": False})) == 0
-    assert (
-        service.scoreboard._success(record.model_copy(update={"human_accepted": False})) == 0
-    )
+    assert service.scoreboard._success(record.model_copy(update={"human_accepted": False})) == 0
     service.close()
 
 

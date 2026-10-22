@@ -23,7 +23,8 @@ class FeatureExtractor:
         r"\b(must|do not|don't|preserve|only|without|at least|exactly|keep|avoid)\b", re.I
     )
     UNCERTAINTY = re.compile(
-        r"\b(maybe|possibly|unclear|unknown|unsure|might|could be|not sure|take a look|something (?:is )?(?:odd|strange))\b",
+        r"\b(maybe|possibly|unclear|unknown|unsure|might|could be|not sure|take a look|"
+        r"something (?:is )?(?:odd|strange))\b",
         re.I,
     )
     BROAD = re.compile(

@@ -9,7 +9,7 @@ from tgv.service import TGVService
 
 def create_server(repo: Path, config: Path | None = None) -> Any:
     try:
-        from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
+        from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
         raise RuntimeError("MCP support requires: pip install 'tgv-agent[mcp]'") from exc
 

@@ -67,7 +67,7 @@ def _outcome(
         tests_passed=success,
         static_checks_passed=success,
         human_accepted=accepted,
-        rework_required=False if accepted is not False else True,
+        rework_required=accepted is False,
         retry_count=1 if index % 5 == 0 else 0,
         latency_seconds=float(index + 1),
         estimated_cost=0.01 * (index + 1),
@@ -183,9 +183,7 @@ def test_counterfactual_safety_and_scoreboard_paths() -> None:
             "frontier_deep": 0.0,
         },
     )
-    no_small_change = _counterfactual(
-        empty_weights, "opaque", impossible, Route.FRONTIER_DEEP
-    )
+    no_small_change = _counterfactual(empty_weights, "opaque", impossible, Route.FRONTIER_DEEP)
     assert "No small request-signal change" in no_small_change.note
     assert no_small_change.changes
 
