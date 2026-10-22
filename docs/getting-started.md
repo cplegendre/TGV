@@ -66,7 +66,8 @@ tgv outcomes validate TASK_ID --tests-passed --static-checks-passed --repo .
 ```
 
 Linking stores only the session identifier and SHA-256 content hash, never the path or raw
-contents. Completion alone is not verified success; tests, static checks, or human feedback must
+contents. Validation flags record user-attested results; TGV does not execute the tests or static
+checks. Completion alone is not verified success; tests, static checks, or human feedback must
 also be recorded.
 
 Outcome-based scoreboard recommendations are **experimental**. Until the configured minimum sample count is met, TGV returns `fallback_used: true` with a reason and preserves the deterministic route.

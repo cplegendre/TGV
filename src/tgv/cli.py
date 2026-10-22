@@ -164,11 +164,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     outcomes.add_argument("--attempt", help="Existing execution attempt id to link the session to")
     tests = outcomes.add_mutually_exclusive_group()
-    tests.add_argument("--tests-passed", action="store_true")
-    tests.add_argument("--tests-failed", action="store_true")
+    tests.add_argument(
+        "--tests-passed",
+        action="store_true",
+        help="Record user-attested test success; TGV does not execute tests",
+    )
+    tests.add_argument(
+        "--tests-failed",
+        action="store_true",
+        help="Record user-attested test failure; TGV does not execute tests",
+    )
     static_checks = outcomes.add_mutually_exclusive_group()
-    static_checks.add_argument("--static-checks-passed", action="store_true")
-    static_checks.add_argument("--static-checks-failed", action="store_true")
+    static_checks.add_argument(
+        "--static-checks-passed",
+        action="store_true",
+        help="Record user-attested static-check success; TGV does not run static checks",
+    )
+    static_checks.add_argument(
+        "--static-checks-failed",
+        action="store_true",
+        help="Record user-attested static-check failure; TGV does not run static checks",
+    )
     outcomes.add_argument("--repo", type=_path, default=Path.cwd())
     outcomes.add_argument("--config", type=_path)
     outcomes.add_argument("--format", choices=("json", "csv"), default="json")

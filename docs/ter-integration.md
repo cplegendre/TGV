@@ -64,17 +64,26 @@ tgv outcomes link TASK_ID \
 ```
 
 The command validates that the task belongs to the current repository, rejects missing files,
-directories, symbolic links, oversized files, and malformed session records, and verifies that
-the session contains a consistent session identifier with at least one user and one assistant
-message. It stores only the agent name, the external session identifier, the SHA-256 content
-hash, the attempt link, and timestamps. The absolute path and raw session contents are never
-stored. Repeating an identical link is idempotent; conflicting links and changed content are
-rejected.
+directories, endpoint symbolic links, oversized files, and malformed session records, and verifies
+that the session contains a consistent session identifier with at least one user and one assistant
+message. It stores only the agent name, the external session identifier, the SHA-256 content hash,
+the attempt link, and timestamps. The absolute path and raw session contents are never stored.
+Repeating an identical link is idempotent; conflicting links and changed content are rejected.
 
-The first link reuses an existing empty attempt or creates one. Linking a different session to a
-task that already has a linked attempt creates the next attempt. Use `--attempt ATTEMPT_ID` to
-target an existing attempt explicitly. TGV never discovers sessions automatically and never scans
-developer home directories.
+Session files are opened by descriptor with `O_NOFOLLOW` where the platform supports it, and the
+regular-file and size checks run against `fstat()` for the file actually opened. The size limit is
+also enforced while reading, so a file that grows after opening is rejected. Symlinks in parent
+directories are followed because the operating system traverses the explicit path; only the final
+path component is protected from symlink substitution. On platforms without `O_NOFOLLOW`, TGV uses
+a pre-open symlink check, which retains a narrow check-to-open race. TGV does not lock session
+files: concurrent in-place modification can produce a hash of the bytes actually read, and
+replacing the path after opening does not redirect reads away from the opened descriptor.
+
+Attempt selection and session linking execute in one `BEGIN IMMEDIATE` SQLite transaction. The
+first link reuses an existing empty attempt or creates one; if linking fails, the attempt is rolled
+back. Linking a different session to a task that already has a linked attempt creates the next
+attempt. Use `--attempt ATTEMPT_ID` to target an existing attempt explicitly. TGV never discovers
+sessions automatically and never scans developer home directories.
 
 ### Supported session formats
 
@@ -86,7 +95,7 @@ OpenAI documentation does not define a stable transcript-file schema. TGV theref
 validate or link Codex transcript files yet. Adding a future format requires a documented schema
 and agent-specific validation tests.
 
-## Record validation evidence
+## Record user-attested validation evidence
 
 ```bash
 tgv outcomes validate TASK_ID --tests-passed --static-checks-passed --repo .
@@ -94,9 +103,10 @@ tgv outcomes validate TASK_ID --tests-failed --repo .
 ```
 
 Positive and negative evidence can be recorded independently. Contradictory flags are rejected.
-Validation evidence uses the existing outcome semantics: a completed task with no tests, static
-checks, or human feedback remains unverified. Task completion and human acceptance commands are
-unchanged.
+These flags record results the user attests to; TGV does not execute tests or static checks and
+cannot independently confirm the claims. Validation evidence uses the existing outcome semantics:
+a completed task with no tests, static checks, or human feedback remains unverified. Task
+completion and human acceptance commands are unchanged.
 
 ## Interpret results carefully
 

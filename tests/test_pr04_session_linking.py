@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 import sqlite3
+import stat
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 
@@ -11,6 +16,7 @@ from tgv import session_linking
 from tgv.cli import main
 from tgv.config import default_config
 from tgv.evaluation import run_outcome_benchmark
+from tgv.exceptions import CorrelationMismatchError, CrossRepositoryError
 from tgv.intelligence import TaskProfiler
 from tgv.outcomes import OutcomeLedger
 from tgv.session_linking import validate_agent_session
@@ -372,7 +378,7 @@ def test_link_rejects_repository_mismatch(
     config = _shared_ledger_config(tmp_path, repo)
 
     error = _expect_exit(_link(other, task_id, session, config=config), 2, capsys)
-    assert "does not match the current repository" in error
+    assert "does not match the task repository" in error
 
 
 def test_link_rejects_conflicting_attempt(
@@ -448,30 +454,116 @@ def test_link_rejects_unreadable_session_file(
 ) -> None:
     session = _write_session(tmp_path / "session.jsonl")
 
-    def fail_open(self: Path, *args: object, **kwargs: object) -> object:
-        raise OSError("permission denied")
+    def fail_open(*args: object, **kwargs: object) -> int:
+        raise PermissionError(errno.EACCES, "permission denied")
 
-    monkeypatch.setattr(Path, "open", fail_open)
+    monkeypatch.setattr(session_linking.os, "open", fail_open)
     with pytest.raises(Exception, match="not readable"):
         validate_agent_session(session, "claude-code")
 
 
-def test_link_rejects_unresolvable_session_path(
+def test_link_enforces_size_limit_while_reading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     session = _write_session(tmp_path / "session.jsonl")
+    real_fstat = os.fstat
 
-    def fail_resolve(self: Path, strict: bool = False) -> Path:
-        raise OSError("cannot resolve")
+    def zero_size_stat(descriptor: int) -> os.stat_result:
+        info = real_fstat(descriptor)
+        return os.stat_result(
+            (
+                info.st_mode,
+                info.st_ino,
+                info.st_dev,
+                info.st_nlink,
+                info.st_uid,
+                info.st_gid,
+                0,
+                info.st_atime,
+                info.st_mtime,
+                info.st_ctime,
+            )
+        )
 
-    monkeypatch.setattr(Path, "resolve", fail_resolve)
-    with pytest.raises(Exception, match="not readable"):
+    monkeypatch.setattr(session_linking.os, "fstat", zero_size_stat)
+    monkeypatch.setattr(session_linking, "MAX_SESSION_BYTES", 10)
+    with pytest.raises(Exception, match="grew beyond"):
         validate_agent_session(session, "claude-code")
 
 
 def test_link_rejects_invalid_path_characters() -> None:
-    with pytest.raises(Exception, match="does not exist"):
+    with pytest.raises(Exception, match="invalid"):
         validate_agent_session(Path("invalid\x00session.jsonl"), "claude-code")
+
+
+def test_parent_directory_symlink_is_followed(
+    tmp_path: Path,
+) -> None:
+    real_directory = tmp_path / "real"
+    real_directory.mkdir()
+    session = _write_session(real_directory / "session.jsonl")
+    linked_directory = tmp_path / "linked"
+    try:
+        linked_directory.symlink_to(real_directory, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not supported on this platform")
+
+    validated = validate_agent_session(linked_directory / session.name, "claude-code")
+    assert validated.external_session_id == SESSION_ID
+
+
+def test_symlink_check_without_o_nofollow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    target = _write_session(tmp_path / "target.jsonl")
+    link = tmp_path / "link.jsonl"
+    try:
+        link.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks are not supported on this platform")
+    monkeypatch.delattr(session_linking.os, "O_NOFOLLOW")
+
+    with pytest.raises(Exception, match="symbolic link"):
+        validate_agent_session(link, "claude-code")
+
+
+def test_symlink_check_error_without_o_nofollow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _write_session(tmp_path / "session.jsonl")
+    monkeypatch.delattr(session_linking.os, "O_NOFOLLOW")
+
+    def fail_is_symlink(self: Path) -> bool:
+        raise OSError("stat failed")
+
+    monkeypatch.setattr(Path, "is_symlink", fail_is_symlink)
+    with pytest.raises(Exception, match="does not exist"):
+        validate_agent_session(session, "claude-code")
+
+
+def test_fstat_symlink_mode_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _write_session(tmp_path / "session.jsonl")
+    symlink_stat = os.stat_result((stat.S_IFLNK | 0o777, 1, 1, 1, 0, 0, 0, 0, 0, 0))
+    monkeypatch.setattr(session_linking.os, "fstat", lambda descriptor: symlink_stat)
+
+    with pytest.raises(Exception, match="symbolic link"):
+        validate_agent_session(session, "claude-code")
+
+
+def test_read_error_after_open_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _write_session(tmp_path / "session.jsonl")
+
+    class FailingHandle:
+        def __enter__(self) -> FailingHandle:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def readline(self, size: int) -> bytes:
+            raise OSError("read failed")
+
+    monkeypatch.setattr(session_linking, "_open_session_file", lambda path: FailingHandle())
+    with pytest.raises(Exception, match="not readable"):
+        validate_agent_session(session, "claude-code")
 
 
 def test_linked_sessions_preserve_privacy(
@@ -712,3 +804,144 @@ def test_existing_outcome_commands_are_compatible(
     main(["outcomes", "complete", task_id, "--accepted", "--repo", str(repo)])
     completed = json.loads(capsys.readouterr().out)
     assert completed == {"task_id": task_id, "completed": True, "accepted": True}
+
+
+def test_atomic_link_rolls_back_attempt_when_session_insert_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    task_id = _create_task(repo)
+    ledger = _ledger(repo)
+
+    def fail_insert(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("simulated session insert failure")
+
+    monkeypatch.setattr(OutcomeLedger, "_insert_agent_session", staticmethod(fail_insert))
+    with pytest.raises(RuntimeError, match="simulated session insert failure"):
+        ledger.link_agent_session_for_task(
+            task_id,
+            agent="claude-code",
+            external_session_id=SESSION_ID,
+            content_hash="a" * 64,
+        )
+
+    assert _ledger(repo).execution_attempts(task_id) == []
+    with sqlite3.connect(repo / ".tgv" / "outcomes.sqlite3") as connection:
+        assert connection.execute("SELECT COUNT(*) FROM agent_sessions").fetchone()[0] == 0
+
+
+def test_atomic_link_rejects_attempt_from_another_task(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    first_task = _create_task(repo, "fix the first helper")
+    second_task = _create_task(repo, "fix the second helper")
+    ledger = _ledger(repo)
+    attempt = ledger.create_execution_attempt(first_task)
+
+    with pytest.raises(CorrelationMismatchError, match="different task"):
+        ledger.link_agent_session_for_task(
+            second_task,
+            agent="claude-code",
+            external_session_id=SESSION_ID,
+            content_hash="a" * 64,
+            attempt_id=attempt.attempt_id,
+        )
+    assert len(_ledger(repo).agent_sessions(attempt.attempt_id)) == 0
+
+
+def test_atomic_link_rejects_cross_repository_before_creating_attempt(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    task_id = _create_task(repo)
+    ledger = _ledger(repo)
+
+    with pytest.raises(CrossRepositoryError, match="does not match"):
+        ledger.link_agent_session_for_task(
+            task_id,
+            agent="claude-code",
+            external_session_id=SESSION_ID,
+            content_hash="a" * 64,
+            expected_repository_id="other-repository",
+        )
+    assert _ledger(repo).execution_attempts(task_id) == []
+
+
+def test_agent_session_lookup_is_namespaced_and_strips_input(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    task_id = _create_task(repo)
+    ledger = _ledger(repo)
+    assert ledger.agent_session("claude-code", SESSION_ID) is None
+
+    _, link, _ = ledger.link_agent_session_for_task(
+        task_id,
+        agent="claude-code",
+        external_session_id=SESSION_ID,
+        content_hash="a" * 64,
+    )
+    found = ledger.agent_session(" claude-code ", f" {SESSION_ID} ")
+    assert found == link
+
+
+def test_concurrent_identical_linking_is_idempotent(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    task_id = _create_task(repo)
+    barrier = Barrier(2)
+
+    def worker() -> tuple[str, str, bool]:
+        ledger = _ledger(repo)
+        barrier.wait()
+        attempt, link, created = ledger.link_agent_session_for_task(
+            task_id,
+            agent="claude-code",
+            external_session_id=SESSION_ID,
+            content_hash="a" * 64,
+        )
+        return attempt.attempt_id, link.session_link_id, created
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [future.result() for future in [pool.submit(worker), pool.submit(worker)]]
+
+    assert len({result[0] for result in results}) == 1
+    assert len({result[1] for result in results}) == 1
+    assert sorted(result[2] for result in results) == [False, True]
+    ledger = _ledger(repo)
+    attempts = ledger.execution_attempts(task_id)
+    assert len(attempts) == 1
+    assert len(ledger.agent_sessions(attempts[0].attempt_id)) == 1
+
+
+def test_concurrent_distinct_linking_allocates_distinct_attempts(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    task_id = _create_task(repo)
+    barrier = Barrier(2)
+
+    def worker(session_id: str, content_hash: str) -> tuple[str, str]:
+        ledger = _ledger(repo)
+        barrier.wait()
+        attempt, link, created = ledger.link_agent_session_for_task(
+            task_id,
+            agent="claude-code",
+            external_session_id=session_id,
+            content_hash=content_hash,
+        )
+        assert created is True
+        return attempt.attempt_id, link.external_session_id
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(worker, SESSION_ID, "a" * 64),
+            pool.submit(worker, OTHER_SESSION_ID, "b" * 64),
+        ]
+        results = [future.result() for future in futures]
+
+    ledger = _ledger(repo)
+    attempts = ledger.execution_attempts(task_id)
+    assert len(attempts) == 2
+    assert {attempt.attempt_id for attempt in attempts} == {result[0] for result in results}
+    for attempt_id, external_session_id in results:
+        links = ledger.agent_sessions(attempt_id)
+        assert [link.external_session_id for link in links] == [external_session_id]

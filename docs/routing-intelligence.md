@@ -55,8 +55,9 @@ tgv benchmark outcomes --repo . --json
 
 `outcomes link` associates a validated external agent session with an execution attempt using a
 SHA-256 content hash and the session identifier. It never stores the session path or contents, and
-identical links are idempotent. `outcomes validate` records explicit positive or negative test and
-static-analysis evidence without changing the existing verified-success semantics.
+identical links are idempotent. `outcomes validate` records user-attested positive or negative test
+and static-analysis results without executing them and without changing the existing
+verified-success semantics.
 
 ## Benchmark scope
 

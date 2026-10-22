@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 import re
 import stat
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 from tgv.exceptions import (
-    ConflictingSessionLinkError,
     CrossRepositoryError,
     OutcomeCorrelationError,
     ValidationFailure,
@@ -57,8 +59,7 @@ def validate_agent_session(path: Path, agent: str) -> ValidatedSession:
         raise ValidationFailure(
             f"Unsupported agent session format {agent!r}; supported formats: {supported}"
         )
-    session_path = _validated_session_path(path)
-    session_id, content_hash = validator(session_path)
+    session_id, content_hash = validator(path.expanduser())
     if not _SESSION_ID.fullmatch(session_id):
         raise ValidationFailure(
             "Agent session id must be a bounded token using letters, digits, "
@@ -94,65 +95,60 @@ def link_session_to_task(
 ) -> SessionLinkResult:
     """Link a validated external session to an attempt for an existing task."""
     validated = validate_agent_session(session_path, agent)
-    repository_id = ensure_task_repository(ledger, task_id, repository_root)
-
-    existing = ledger.agent_session(validated.agent, validated.external_session_id)
-    if existing is not None:
-        attempts = ledger.execution_attempts(task_id)
-        attempt = next((item for item in attempts if item.attempt_id == existing.attempt_id), None)
-        if attempt is None:
-            raise ConflictingSessionLinkError(
-                "External session id is already linked to a different task"
-            )
-        if attempt_id is not None and attempt.attempt_id != attempt_id:
-            raise ConflictingSessionLinkError(
-                "External session id is already linked to a different execution attempt"
-            )
-        if existing.content_hash != validated.content_hash:
-            raise ConflictingSessionLinkError(
-                "External session content changed after it was linked"
-            )
-        return SessionLinkResult(task_id=task_id, attempt=attempt, link=existing, created=False)
-
-    attempts = ledger.execution_attempts(task_id)
-    if attempt_id is not None:
-        attempt = next((item for item in attempts if item.attempt_id == attempt_id), None)
-        if attempt is None:
-            raise OutcomeCorrelationError(
-                f"Unknown execution attempt {attempt_id!r} for task {task_id}"
-            )
-    elif attempts and not ledger.agent_sessions(attempts[-1].attempt_id):
-        attempt = attempts[-1]
-    else:
-        attempt = ledger.create_execution_attempt(task_id, expected_repository_id=repository_id)
-
-    link = ledger.link_agent_session(
-        attempt.attempt_id,
-        agent=validated.agent,
-        external_session_id=validated.external_session_id,
-        content_hash=validated.content_hash,
-    )
-    return SessionLinkResult(task_id=task_id, attempt=attempt, link=link, created=True)
-
-
-def _validated_session_path(path: Path) -> Path:
-    expanded = path.expanduser()
     try:
-        info = expanded.lstat()
-    except (OSError, ValueError) as exc:
-        raise ValidationFailure(f"Agent session file does not exist: {expanded}") from exc
-    if stat.S_ISLNK(info.st_mode):
-        raise ValidationFailure("Agent session path must not be a symbolic link")
-    if not stat.S_ISREG(info.st_mode):
-        raise ValidationFailure("Agent session path must be a regular file")
-    if info.st_size > MAX_SESSION_BYTES:
-        raise ValidationFailure(
-            f"Agent session file exceeds the {MAX_SESSION_BYTES}-byte safety limit"
+        attempt, link, created = ledger.link_agent_session_for_task(
+            task_id,
+            agent=validated.agent,
+            external_session_id=validated.external_session_id,
+            content_hash=validated.content_hash,
+            expected_repository_id=ledger.repository_id(repository_root),
+            attempt_id=attempt_id,
         )
+    except KeyError as exc:
+        raise OutcomeCorrelationError(str(exc)) from exc
+    return SessionLinkResult(
+        task_id=task_id,
+        attempt=attempt,
+        link=link,
+        created=created,
+    )
+
+
+def _open_session_file(path: Path) -> BinaryIO:
+    """Open a session file without following a substituted final symlink."""
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags |= nofollow
+    if nofollow == 0:
+        try:
+            if path.is_symlink():
+                raise ValidationFailure("Agent session path must not be a symbolic link")
+        except OSError as exc:
+            raise ValidationFailure(f"Agent session file does not exist: {path}") from exc
     try:
-        return expanded.resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise ValidationFailure("Agent session file is not readable") from exc
+        descriptor = os.open(path, flags)
+    except ValueError as exc:
+        raise ValidationFailure("Agent session path is invalid") from exc
+    except OSError as exc:
+        if exc.errno in {errno.ELOOP, errno.EMLINK}:
+            raise ValidationFailure("Agent session path must not be a symbolic link") from exc
+        if exc.errno in {errno.ENOENT, errno.ENOTDIR}:
+            raise ValidationFailure(f"Agent session file does not exist: {path}") from exc
+        raise ValidationFailure(f"Agent session file is not readable: {path}") from exc
+    try:
+        info = os.fstat(descriptor)
+        if stat.S_ISLNK(info.st_mode):
+            raise ValidationFailure("Agent session path must not be a symbolic link")
+        if not stat.S_ISREG(info.st_mode):
+            raise ValidationFailure("Agent session path must be a regular file")
+        if info.st_size > MAX_SESSION_BYTES:
+            raise ValidationFailure(
+                f"Agent session file exceeds the {MAX_SESSION_BYTES}-byte safety limit"
+            )
+        return os.fdopen(descriptor, "rb")
+    except BaseException:
+        os.close(descriptor)
+        raise
 
 
 def _validate_claude_code(path: Path) -> tuple[str, str]:
@@ -164,8 +160,16 @@ def _validate_claude_code(path: Path) -> tuple[str, str]:
     saw_user = False
     saw_assistant = False
     try:
-        with path.open("rb") as handle:
-            for line_number, raw_line in enumerate(handle, 1):
+        with _open_session_file(path) as handle:
+            line_number = 0
+            total_bytes = 0
+            while raw_line := handle.readline(MAX_SESSION_BYTES - total_bytes + 1):
+                line_number += 1
+                total_bytes += len(raw_line)
+                if total_bytes > MAX_SESSION_BYTES:
+                    raise ValidationFailure(
+                        f"Agent session file grew beyond the {MAX_SESSION_BYTES}-byte safety limit"
+                    )
                 digest.update(raw_line)
                 stripped = raw_line.strip()
                 if not stripped:

@@ -35,6 +35,21 @@ _SCHEMA_VERSION = 2
 _CONTENT_HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
+def _normalize_session_link(
+    agent: str, external_session_id: str, content_hash: str | None
+) -> tuple[str, str, str | None]:
+    agent_name = agent.strip()
+    session_id = external_session_id.strip()
+    if not agent_name:
+        raise ValueError("Agent name must not be empty")
+    if not session_id:
+        raise ValueError("External session id must not be empty")
+    normalized_hash = None if content_hash is None else content_hash.lower()
+    if normalized_hash is not None and not _CONTENT_HASH.fullmatch(normalized_hash):
+        raise ValueError("content_hash must be a sha256 hex digest")
+    return agent_name, session_id, normalized_hash
+
+
 class OutcomeLedger:
     """Privacy-minimal SQLite outcome store with transactional schema initialization."""
 
@@ -286,6 +301,7 @@ class OutcomeLedger:
         tests_passed: bool | None,
         static_checks_passed: bool | None,
     ) -> None:
+        """Record caller-attested validation results; TGV does not execute the checks."""
         self._update(
             task_id,
             tests_passed=tests_passed,
@@ -391,52 +407,67 @@ class OutcomeLedger:
         status: str,
     ) -> ExecutionAttempt:
         with closing(self._connect()) as connection, connection:
-            task = connection.execute(
-                "SELECT repository_id, routing_decision_id FROM outcomes WHERE task_id = ?",
-                (task_id,),
-            ).fetchone()
-            if task is None:
-                raise KeyError(f"Unknown task id: {task_id}")
-            repository_id = str(task["repository_id"])
-            if expected_repository_id is not None and expected_repository_id != repository_id:
-                raise CrossRepositoryError(
-                    "Execution attempt repository does not match the task repository"
-                )
-            attempt_number = int(
-                connection.execute(
-                    "SELECT COALESCE(MAX(attempt_number), 0) + 1 "
-                    "FROM execution_attempts WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()[0]
+            return self._insert_execution_attempt(
+                connection,
+                task_id,
+                expected_repository_id=expected_repository_id,
+                started_at=started_at,
+                status=status,
             )
-            attempt = ExecutionAttempt(
-                attempt_id=str(uuid.uuid4()),
-                task_id=task_id,
-                repository_id=repository_id,
-                routing_decision_id=(
-                    None
-                    if task["routing_decision_id"] is None
-                    else str(task["routing_decision_id"])
-                ),
-                attempt_number=attempt_number,
-                started_at=started_at or datetime.now(UTC),
-                status=status.strip(),
+
+    @staticmethod
+    def _insert_execution_attempt(
+        connection: sqlite3.Connection,
+        task_id: str,
+        *,
+        expected_repository_id: str | None,
+        started_at: datetime | None,
+        status: str,
+    ) -> ExecutionAttempt:
+        task = connection.execute(
+            "SELECT repository_id, routing_decision_id FROM outcomes WHERE task_id = ?",
+            (task_id,),
+        ).fetchone()
+        if task is None:
+            raise KeyError(f"Unknown task id: {task_id}")
+        repository_id = str(task["repository_id"])
+        if expected_repository_id is not None and expected_repository_id != repository_id:
+            raise CrossRepositoryError(
+                "Execution attempt repository does not match the task repository"
             )
+        attempt_number = int(
             connection.execute(
-                "INSERT INTO execution_attempts (attempt_id, task_id, repository_id, "
-                "routing_decision_id, attempt_number, started_at, completed_at, status) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    attempt.attempt_id,
-                    attempt.task_id,
-                    attempt.repository_id,
-                    attempt.routing_decision_id,
-                    attempt.attempt_number,
-                    attempt.started_at.isoformat(),
-                    None,
-                    attempt.status,
-                ),
-            )
+                "SELECT COALESCE(MAX(attempt_number), 0) + 1 "
+                "FROM execution_attempts WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()[0]
+        )
+        attempt = ExecutionAttempt(
+            attempt_id=str(uuid.uuid4()),
+            task_id=task_id,
+            repository_id=repository_id,
+            routing_decision_id=(
+                None if task["routing_decision_id"] is None else str(task["routing_decision_id"])
+            ),
+            attempt_number=attempt_number,
+            started_at=started_at or datetime.now(UTC),
+            status=status.strip(),
+        )
+        connection.execute(
+            "INSERT INTO execution_attempts (attempt_id, task_id, repository_id, "
+            "routing_decision_id, attempt_number, started_at, completed_at, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                attempt.attempt_id,
+                attempt.task_id,
+                attempt.repository_id,
+                attempt.routing_decision_id,
+                attempt.attempt_number,
+                attempt.started_at.isoformat(),
+                None,
+                attempt.status,
+            ),
+        )
         return attempt
 
     def update_execution_attempt(
@@ -474,57 +505,187 @@ class OutcomeLedger:
         linked_at: datetime | None = None,
     ) -> AgentSessionLink:
         """Link an opaque external agent-session reference to an execution attempt."""
-        agent_name = agent.strip()
-        session_id = external_session_id.strip()
-        if not agent_name:
-            raise ValueError("Agent name must not be empty")
-        if not session_id:
-            raise ValueError("External session id must not be empty")
-        normalized_hash = None if content_hash is None else content_hash.lower()
-        if normalized_hash is not None and not _CONTENT_HASH.fullmatch(normalized_hash):
-            raise ValueError("content_hash must be a sha256 hex digest")
+        agent_name, session_id, normalized_hash = _normalize_session_link(
+            agent, external_session_id, content_hash
+        )
         with closing(self._connect()) as connection, connection:
             attempt = connection.execute(
                 "SELECT attempt_id FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
             ).fetchone()
             if attempt is None:
                 raise KeyError(f"Unknown attempt id: {attempt_id}")
-            link = AgentSessionLink(
-                session_link_id=str(uuid.uuid4()),
+            return self._insert_agent_session(
+                connection,
                 attempt_id=attempt_id,
                 agent=agent_name,
                 external_session_id=session_id,
                 content_hash=normalized_hash,
-                linked_at=linked_at or datetime.now(UTC),
+                linked_at=linked_at,
             )
+
+    @staticmethod
+    def _insert_agent_session(
+        connection: sqlite3.Connection,
+        *,
+        attempt_id: str,
+        agent: str,
+        external_session_id: str,
+        content_hash: str | None,
+        linked_at: datetime | None,
+    ) -> AgentSessionLink:
+        link = AgentSessionLink(
+            session_link_id=str(uuid.uuid4()),
+            attempt_id=attempt_id,
+            agent=agent,
+            external_session_id=external_session_id,
+            content_hash=content_hash,
+            linked_at=linked_at or datetime.now(UTC),
+        )
+        try:
+            connection.execute(
+                "INSERT INTO agent_sessions (session_link_id, attempt_id, agent, "
+                "external_session_id, content_hash, linked_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    link.session_link_id,
+                    link.attempt_id,
+                    link.agent,
+                    link.external_session_id,
+                    link.content_hash,
+                    link.linked_at.isoformat(),
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            existing = connection.execute(
+                "SELECT * FROM agent_sessions WHERE agent = ? AND external_session_id = ?",
+                (agent, external_session_id),
+            ).fetchone()
+            if existing is None:
+                raise
+            if existing["attempt_id"] != attempt_id or (
+                content_hash is not None and existing["content_hash"] != content_hash
+            ):
+                raise ConflictingSessionLinkError(
+                    "External session id is already linked to a different attempt"
+                ) from exc
+            return OutcomeLedger._row_to_session_link(existing)
+        return link
+
+    def link_agent_session_for_task(
+        self,
+        task_id: str,
+        *,
+        agent: str,
+        external_session_id: str,
+        content_hash: str | None = None,
+        expected_repository_id: str | None = None,
+        attempt_id: str | None = None,
+        started_at: datetime | None = None,
+    ) -> tuple[ExecutionAttempt, AgentSessionLink, bool]:
+        """Atomically select/create an attempt and link a validated agent session."""
+        agent_name, session_id, normalized_hash = _normalize_session_link(
+            agent, external_session_id, content_hash
+        )
+        with closing(self._connect()) as connection:
             try:
-                connection.execute(
-                    "INSERT INTO agent_sessions (session_link_id, attempt_id, agent, "
-                    "external_session_id, content_hash, linked_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (
-                        link.session_link_id,
-                        link.attempt_id,
-                        link.agent,
-                        link.external_session_id,
-                        link.content_hash,
-                        link.linked_at.isoformat(),
-                    ),
-                )
-            except sqlite3.IntegrityError as exc:
+                connection.execute("BEGIN IMMEDIATE")
+                task = connection.execute(
+                    "SELECT repository_id FROM outcomes WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if task is None:
+                    raise KeyError(f"Unknown task id: {task_id}")
+                repository_id = str(task["repository_id"])
+                if expected_repository_id is not None and expected_repository_id != repository_id:
+                    raise CrossRepositoryError(
+                        "Execution attempt repository does not match the task repository"
+                    )
+
                 existing = connection.execute(
                     "SELECT * FROM agent_sessions WHERE agent = ? AND external_session_id = ?",
                     (agent_name, session_id),
                 ).fetchone()
-                if existing is None:
-                    raise
-                if existing["attempt_id"] != attempt_id or (
-                    normalized_hash is not None and existing["content_hash"] != normalized_hash
-                ):
-                    raise ConflictingSessionLinkError(
-                        "External session id is already linked to a different attempt"
-                    ) from exc
-                return self._row_to_session_link(existing)
-        return link
+                if existing is not None:
+                    attempt_row = connection.execute(
+                        "SELECT * FROM execution_attempts WHERE attempt_id = ?",
+                        (existing["attempt_id"],),
+                    ).fetchone()
+                    if attempt_row is None or attempt_row["task_id"] != task_id:
+                        raise ConflictingSessionLinkError(
+                            "External session id is already linked to a different task"
+                        )
+                    if attempt_id is not None and attempt_row["attempt_id"] != attempt_id:
+                        raise ConflictingSessionLinkError(
+                            "External session id is already linked to a different execution attempt"
+                        )
+                    if existing["content_hash"] != normalized_hash:
+                        raise ConflictingSessionLinkError(
+                            "External session content changed after it was linked"
+                        )
+                    attempt = self._row_to_attempt(attempt_row)
+                    link = self._row_to_session_link(existing)
+                    connection.commit()
+                    return attempt, link, False
+
+                attempt = self._select_or_create_attempt(
+                    connection,
+                    task_id,
+                    expected_repository_id=repository_id,
+                    attempt_id=attempt_id,
+                    started_at=started_at,
+                )
+                link = self._insert_agent_session(
+                    connection,
+                    attempt_id=attempt.attempt_id,
+                    agent=agent_name,
+                    external_session_id=session_id,
+                    content_hash=normalized_hash,
+                    linked_at=None,
+                )
+                connection.commit()
+                return attempt, link, True
+            except BaseException:
+                connection.rollback()
+                raise
+
+    @staticmethod
+    def _select_or_create_attempt(
+        connection: sqlite3.Connection,
+        task_id: str,
+        *,
+        expected_repository_id: str,
+        attempt_id: str | None,
+        started_at: datetime | None,
+    ) -> ExecutionAttempt:
+        if attempt_id is not None:
+            attempt_row = connection.execute(
+                "SELECT * FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
+            ).fetchone()
+            if attempt_row is None:
+                raise KeyError(f"Unknown execution attempt: {attempt_id}")
+            if attempt_row["task_id"] != task_id:
+                raise CorrelationMismatchError("Execution attempt belongs to a different task")
+            return OutcomeLedger._row_to_attempt(attempt_row)
+
+        latest = connection.execute(
+            "SELECT * FROM execution_attempts WHERE task_id = ? "
+            "ORDER BY attempt_number DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        if latest is not None:
+            session_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM agent_sessions WHERE attempt_id = ?",
+                    (latest["attempt_id"],),
+                ).fetchone()[0]
+            )
+            if session_count == 0:
+                return OutcomeLedger._row_to_attempt(latest)
+        return OutcomeLedger._insert_execution_attempt(
+            connection,
+            task_id,
+            expected_repository_id=expected_repository_id,
+            started_at=started_at,
+            status="pending",
+        )
 
     def record_ter_measurement(
         self,
