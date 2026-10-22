@@ -132,6 +132,7 @@ def run_benchmark(path: Path) -> dict[str, Any]:
     )
     return report
 
+
 OUTCOME_RELEASE_GATE: dict[str, float | int] = {
     "minimum_verified_samples": 20,
     "minimum_verified_success_rate": 0.85,
@@ -157,9 +158,7 @@ def _outcome_success(record: OutcomeTask) -> bool | None:
         return None
     if record.tests_passed is False or record.static_checks_passed is False:
         return False
-    if record.human_accepted is False or record.rework_required is True:
-        return False
-    return True
+    return not (record.human_accepted is False or record.rework_required is True)
 
 
 def _average(values: list[float]) -> float | None:

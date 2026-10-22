@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import multiprocessing
 import os
@@ -10,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread, current_thread, main_thread
-from typing import Any, TextIO
+from typing import Any, TextIO, cast
 from uuid import uuid4
 
 from tgv.models import RouteDecision, TGVConfig
@@ -27,9 +28,7 @@ def _atomic_status(path: Path, status: dict[str, object]) -> None:
     atomic_json(path, status)
 
 
-def _route_with_timeout(
-    service: Any, request: str, timeout_seconds: float
-) -> RouteDecision:
+def _route_with_timeout(service: Any, request: str, timeout_seconds: float) -> RouteDecision:
     """Compatibility helper for lightweight/in-process service implementations.
 
     The production TGV daemon uses :class:`RouteWorker`, whose process can be
@@ -53,7 +52,7 @@ def _route_with_timeout(
         signal.signal(sigalrm, expire)
         previous_timer = signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
         try:
-            return service.route(request)
+            return cast(RouteDecision, service.route(request))
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(sigalrm, previous_handler)
@@ -263,10 +262,8 @@ class RouteWorker:
         if self._process is None:
             return
         if self._process.is_alive() and self._request_queue is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._request_queue.put(None, timeout=0.1)
-            except Exception:
-                pass
             self._process.join(timeout=1.0)
         self._terminate()
         self._process = None
@@ -311,7 +308,7 @@ def serve(
 
     previous_term = signal.signal(signal.SIGTERM, stop)
     previous_int = signal.signal(signal.SIGINT, stop)
-    status: dict[str, object] = {
+    status: dict[str, Any] = {
         "pid": os.getpid(),
         "worker_pid": None,
         "worker_restarts": 0,
@@ -457,7 +454,7 @@ def serve(
                 status["service_metrics"] = service_metrics
                 if route is not None:
                     status["requests_succeeded"] = int(status["requests_succeeded"]) + 1
-                    route_counts = dict(status["route_counts"])  # type: ignore[arg-type]
+                    route_counts = dict(status["route_counts"])
                     route_counts[route] = int(route_counts.get(route, 0)) + 1
                     status["route_counts"] = route_counts
                 else:

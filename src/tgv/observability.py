@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -117,8 +118,7 @@ class RuntimeMetrics:
 
 
 class RouteProvider(Protocol):
-    def route(self, request: str) -> RouteDecision:
-        ...
+    def route(self, request: str) -> RouteDecision: ...
 
 
 class ObservedProvider:
@@ -204,11 +204,9 @@ def health_report(status_path: Path, *, maximum_age_seconds: float = 15.0) -> di
 
 def _private_file(path: Path) -> None:
     """Best-effort owner-only permissions for local operational state."""
-    try:
-        path.chmod(0o600)
-    except OSError:
+    with contextlib.suppress(OSError):
         # Some platforms/filesystems do not implement POSIX modes.
-        pass
+        path.chmod(0o600)
 
 
 def atomic_text(path: Path, content: str) -> None:
@@ -228,9 +226,7 @@ def _label(value: str) -> str:
 def _metric(name: str, value: int | float, **labels: str) -> str:
     suffix = ""
     if labels:
-        rendered = ",".join(
-            f'{key}="{_label(str(item))}"' for key, item in sorted(labels.items())
-        )
+        rendered = ",".join(f'{key}="{_label(str(item))}"' for key, item in sorted(labels.items()))
         suffix = "{" + rendered + "}"
     return f"{name}{suffix} {value}"
 

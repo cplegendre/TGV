@@ -271,10 +271,7 @@ def render_demo(result: DemoResult) -> str:
             f"Result - PASS : {result.matched_routes}/{result.tasks_processed} "
             f"{passed_percent:.1f}% success"
         ),
-        (
-            f"Result - FAIL : {result.failed_routes}/{result.tasks_processed} "
-            f"{failed_percent:.1f}%"
-        ),
+        (f"Result - FAIL : {result.failed_routes}/{result.tasks_processed} {failed_percent:.1f}%"),
         "",
         "Report",
         "------",
