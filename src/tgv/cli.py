@@ -61,6 +61,17 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="Check configuration and local provider availability")
     doctor.add_argument("--config", type=_path)
 
+    health = sub.add_parser("health", help="Check daemon readiness from its heartbeat status")
+    health.add_argument("--status-file", type=_path, required=True)
+    health.add_argument("--max-age", type=float, default=15.0)
+    health.add_argument("--json", action="store_true")
+
+    metrics = sub.add_parser(
+        "metrics", help="Render daemon status as JSON or Prometheus text exposition"
+    )
+    metrics.add_argument("--status-file", type=_path, required=True)
+    metrics.add_argument("--format", choices=("prometheus", "json"), default="prometheus")
+
     inspect = sub.add_parser("inspect", help="Summarize an accessible repository")
     inspect.add_argument("repo", type=_path, nargs="?", default=Path.cwd())
     inspect.add_argument("--config", type=_path)
@@ -72,6 +83,14 @@ def build_parser() -> argparse.ArgumentParser:
     route.add_argument("--config", type=_path)
     route.add_argument("--explain", action="store_true")
     route.add_argument("--json", action="store_true")
+
+    explain = sub.add_parser(
+        "explain", help="Explain a route and show what would make another route win"
+    )
+    explain.add_argument("request")
+    explain.add_argument("--repo", type=_path, default=Path.cwd())
+    explain.add_argument("--config", type=_path)
+    explain.add_argument("--json", action="store_true")
 
     prepare = sub.add_parser("prepare", help="Build an evidence-backed context bundle")
     prepare.add_argument("request")
@@ -147,13 +166,22 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark = sub.add_parser(
         "benchmark", help="Run integrated profiling/retrieval/routing evaluation"
     )
-    benchmark.add_argument("action", choices=("run",))
+    benchmark.add_argument("action", choices=("run", "outcomes"))
     benchmark.add_argument("--cases", type=_path)
     benchmark.add_argument("--repo", type=_path, default=Path.cwd())
     benchmark.add_argument("--config", type=_path)
     benchmark.add_argument("--json", action="store_true")
+    benchmark.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Exit non-zero when the selected benchmark quality gate fails",
+    )
+    benchmark.add_argument("--limit", type=int, default=10000)
+    benchmark.add_argument("--minimum-verified-samples", type=int, default=20)
+    benchmark.add_argument("--minimum-success-rate", type=float, default=0.85)
+    benchmark.add_argument("--maximum-safety-violation-rate", type=float, default=0.0)
 
-    report = sub.add_parser("report", help="Report local share and token savings evidence")
+    report = sub.add_parser("report", help="Report local routing and token-allocation evidence")
     report.add_argument("--sessions", type=_path, default=Path(".tgv/sessions"))
     report.add_argument(
         "--ter",
@@ -167,7 +195,15 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--repo", type=_path, default=Path.cwd())
     serve.add_argument("--config", type=_path)
     serve.add_argument("--status-file", type=_path)
+    serve.add_argument("--diagnostics-file", type=_path)
+    serve.add_argument(
+        "--metrics-file",
+        type=_path,
+        help="Write Prometheus textfile metrics atomically for external scraping",
+    )
     serve.add_argument("--request-timeout", type=float, default=120.0)
+    serve.add_argument("--heartbeat-interval", type=float, default=5.0)
+    serve.add_argument("--shutdown-grace-seconds", type=float, default=10.0)
 
     search = sub.add_parser("search", help="Search repository text and symbols")
     search.add_argument("query")
@@ -267,6 +303,33 @@ def main(argv: list[str] | None = None) -> None:
                 )
             )
             return
+        if args.command == "health":
+            from tgv.observability import health_report
+
+            report = health_report(args.status_file, maximum_age_seconds=args.max_age)
+            if args.json:
+                print(json.dumps(report, indent=2, sort_keys=True))
+            else:
+                print(
+                    f"health: {'ok' if report['healthy'] else 'fail'}\n"
+                    f"ready: {report['ready']}\n"
+                    f"reason: {report['reason']}"
+                )
+            if not report["healthy"]:
+                raise SystemExit(1)
+            return
+        if args.command == "metrics":
+            from tgv.observability import prometheus_text
+
+            try:
+                status_payload = json.loads(args.status_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise TGVError(f"could not read daemon status: {exc}") from exc
+            if args.format == "json":
+                print(json.dumps(status_payload, indent=2, sort_keys=True))
+            else:
+                print(prometheus_text(status_payload), end="")
+            return
         if args.command == "calibrate":
             import yaml
 
@@ -353,6 +416,10 @@ def main(argv: list[str] | None = None) -> None:
                     service,
                     timeout_seconds=args.request_timeout,
                     status_file=args.status_file,
+                    diagnostics_file=args.diagnostics_file,
+                    metrics_file=args.metrics_file,
+                    heartbeat_interval=args.heartbeat_interval,
+                    shutdown_grace_seconds=args.shutdown_grace_seconds,
                 )
             return
         if args.command == "efficiency":
@@ -388,9 +455,23 @@ def main(argv: list[str] | None = None) -> None:
                                     ),
                                 },
                                 "decision_source": decision.decision_source,
+                                "execution_plan": {
+                                    "model": decision.selected_model,
+                                    "capability_tier": decision.selected_capability_tier,
+                                },
                                 "risk_signals": decision.risk_signals,
                                 "matched_category": decision.matched_category,
                                 "matched_pattern": decision.matched_pattern,
+                                "task_profile": (
+                                    decision.task_profile.model_dump(mode="json")
+                                    if decision.task_profile
+                                    else None
+                                ),
+                                "historical_evidence": (
+                                    decision.scoreboard_recommendation.model_dump(mode="json")
+                                    if decision.scoreboard_recommendation
+                                    else None
+                                ),
                                 "rationale": decision.rationale,
                             },
                             indent=2,
@@ -398,6 +479,15 @@ def main(argv: list[str] | None = None) -> None:
                     )
                 else:
                     print(decision.model_dump_json(indent=2))
+            elif args.command == "explain":
+                from tgv.explain import render_explanation
+
+                explanation = service.explain(args.request)
+                print(
+                    json.dumps(explanation, indent=2, sort_keys=True)
+                    if args.json
+                    else render_explanation(explanation)
+                )
             elif args.command == "prepare":
                 bundle = service.prepare(args.request)
                 command = service.handoff(
@@ -450,15 +540,37 @@ def main(argv: list[str] | None = None) -> None:
                         print(service.outcomes.export_csv(records), end="")
             elif args.command == "scoreboard":
                 profile_result = service.profile(args.request)
-                recommendation = service.scoreboard.recommend(profile_result)
+                recommendation = service.scoreboard.recommend(
+                    profile_result,
+                    repository_id=service.outcomes.repository_id(service.repository.root),
+                )
                 print(recommendation.model_dump_json(indent=2))
             elif args.command == "benchmark":
-                from tgv.evaluation import default_cases_path, run_benchmark
+                from tgv.evaluation import (
+                    default_cases_path,
+                    run_benchmark,
+                    run_outcome_benchmark,
+                )
 
-                report = run_benchmark(args.cases or default_cases_path())
+                if args.action == "outcomes":
+                    repository_id = service.outcomes.repository_id(service.repository.root)
+                    records = service.outcomes.query(
+                        repository_id=repository_id, limit=args.limit
+                    )
+                    report = run_outcome_benchmark(
+                        records,
+                        minimum_verified_samples=args.minimum_verified_samples,
+                        minimum_verified_success_rate=args.minimum_success_rate,
+                        maximum_safety_violation_rate=args.maximum_safety_violation_rate,
+                    )
+                    report["repository_id"] = repository_id
+                else:
+                    report = run_benchmark(args.cases or default_cases_path())
                 print(
                     json.dumps(report, indent=2, sort_keys=True) if args.json else report["summary"]
                 )
+                if args.enforce and not report["release_gate"]["passed"]:
+                    raise SystemExit(1)
             elif args.command == "search":
                 print(
                     json.dumps(

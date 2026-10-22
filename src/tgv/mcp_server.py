@@ -13,7 +13,7 @@ def create_server(repo: Path, config: Path | None = None) -> Any:
     except ImportError as exc:
         raise RuntimeError("MCP support requires: pip install 'tgv-agent[mcp]'") from exc
 
-    service = TGVService.create(repo, config)
+    service = TGVService.create(repo, config, read_only=True)
     mcp = FastMCP("TGV", json_response=True)
 
     @mcp.tool()

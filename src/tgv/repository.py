@@ -4,6 +4,7 @@ import ast
 import fnmatch
 import itertools
 import json
+import os
 import re
 import time
 from collections import Counter
@@ -12,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, TypeAlias
 
 from tgv.exceptions import RepositoryAccessError
+from tgv.observability import atomic_json
 from tgv.models import (
     CodeSymbol,
     Evidence,
@@ -85,9 +87,16 @@ def extract_python_symbols(text: str, path: str) -> list[dict[str, object]]:
 
 
 class Repository:
-    """Bounded, read-only repository access with strict root confinement."""
+    """Bounded repository access with strict root confinement and optional index persistence."""
 
-    def __init__(self, root: Path, config: RepositoryConfig, deny_patterns: list[str]) -> None:
+    def __init__(
+        self,
+        root: Path,
+        config: RepositoryConfig,
+        deny_patterns: list[str],
+        *,
+        persist_index: bool = True,
+    ) -> None:
         try:
             self.root = root.expanduser().resolve(strict=True)
         except OSError as exc:
@@ -96,6 +105,7 @@ class Repository:
             raise RepositoryAccessError(f"Repository root is not a directory: {self.root}")
         self.config = config
         self.deny_patterns = deny_patterns
+        self.persist_index = persist_index
         self._index: Index | None = None
         self._omitted = OmittedSummary()
         self._diagnostics = IndexDiagnostics()
@@ -148,22 +158,44 @@ class Repository:
         return self._eligibility(path) is None
 
     def files(self) -> Iterator[Path]:
+        """Yield eligible files while pruning ignored directories before descent."""
         self._omitted = OmittedSummary()
+
+        def onerror(exc: OSError) -> None:
+            raise exc
+
         try:
-            paths = sorted(self.root.rglob("*"))
+            for directory, dirnames, filenames in os.walk(
+                self.root, topdown=True, followlinks=False, onerror=onerror
+            ):
+                dirnames.sort()
+                filenames.sort()
+                retained: list[str] = []
+                for dirname in dirnames:
+                    path = Path(directory) / dirname
+                    if dirname in self.config.ignored_directories:
+                        continue
+                    if path.is_symlink():
+                        reason = self._eligibility(path) or "ignored"
+                        setattr(self._omitted, reason, getattr(self._omitted, reason) + 1)
+                        continue
+                    retained.append(dirname)
+                dirnames[:] = retained
+
+                for filename in filenames:
+                    path = Path(directory) / filename
+                    reason = self._eligibility(path)
+                    if reason is None:
+                        yield path
+                        continue
+                    try:
+                        should_count = path.is_file() or path.is_symlink()
+                    except OSError:
+                        should_count = True
+                    if should_count:
+                        setattr(self._omitted, reason, getattr(self._omitted, reason) + 1)
         except OSError as exc:
             raise RepositoryAccessError(f"Cannot enumerate repository root: {self.root}") from exc
-        for path in paths:
-            reason = self._eligibility(path)
-            if reason is None:
-                yield path
-                continue
-            try:
-                should_count = path.is_file() or path.is_symlink()
-            except OSError:
-                should_count = True
-            if should_count:
-                setattr(self._omitted, reason, getattr(self._omitted, reason) + 1)
 
     def list_files(self, limit: int | None = None) -> list[str]:
         maximum = limit if limit is not None else self.config.maximum_results
@@ -274,15 +306,13 @@ class Repository:
             cache_hits=cache_hits,
             cache_misses=cache_misses,
         )
-        try:
-            target = self._index_file()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(
-                json.dumps({"version": 2, "files": current}, sort_keys=True, separators=(",", ":")),
-                encoding="utf-8",
-            )
-        except (OSError, RepositoryAccessError):
-            pass
+        if self.persist_index:
+            try:
+                target = self._index_file()
+                target.parent.mkdir(parents=True, exist_ok=True)
+                atomic_json(target, {"version": 2, "files": current})
+            except (OSError, RepositoryAccessError):
+                pass
         return current
 
     @staticmethod

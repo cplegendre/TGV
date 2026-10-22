@@ -1,11 +1,33 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+
+
+class StrictConfigModel(BaseModel):
+    """Configuration model that rejects unknown keys instead of silently ignoring typos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def _validate_regex(value: str, *, field_name: str) -> str:
+    try:
+        re.compile(value)
+    except re.error as exc:
+        raise ValueError(f"invalid regular expression for {field_name}: {exc}") from exc
+    return value
 
 
 class Route(StrEnum):
@@ -52,7 +74,7 @@ class HandoffMode(StrEnum):
     DISABLED = "disabled"
 
 
-class ModelRoleConfig(BaseModel):
+class ModelRoleConfig(StrictConfigModel):
     provider: str
     model: str
     reasoning: ReasoningLevel = ReasoningLevel.STANDARD
@@ -64,25 +86,42 @@ class ModelRoleConfig(BaseModel):
     temperature: float = Field(default=0.0, ge=0, le=2)
 
 
-class PatternConfig(BaseModel):
+class PatternConfig(StrictConfigModel):
     high_risk: dict[str, str] = Field(
         default_factory=lambda: {
-            "security-sensitive": r"\b(vulnerability|exploit|rotate (?:production )?(?:credentials|keys|secrets)|redesign (?:authentication|authorization|security)|change auth(?:entication|orization))\b",  # noqa: E501
-            "architecture": r"\b(redesign|re-architect|split(?: the| this| our)? (?:system )?into microservices|major migration|architecture migration|security architecture)\b",  # noqa: E501
+            "security-sensitive": r"\b(vulnerability|exploit|rotate (?:production )?(?:credentials|keys|secrets)|redesign (?:authentication|authorization|security)|change auth(?:entication|orization)|(?:add|change|fix|implement|redesign|harden|rotate).{0,50}(?:auth(?:entication|orization)?|permission|csrf|xss|secret|credential|security))\b",  # noqa: E501
+            "architecture": r"\b(redesign|re-architect|split(?: the| this| our)? (?:system )?into microservices|major migration|architecture migration|security architecture|(?:design|introduce|migrate|replace|split).{0,50}(?:architecture|microservices?|distributed system|public api|schema))\b",  # noqa: E501
             "concurrency": r"\b(race condition|deadlock|make .*thread[- ]?safe|concurrency bug)\b",
             "destructive": r"\b(delet(?:e|ing) production|drop (?:the )?(?:production )?database|force push|rotate keys)\b",  # noqa: E501
         }
     )
-    code: str = r"\b(add|fix|implement|refactor|write tests?|change|patch|debug|optimi[sz]e)\b"
+    code: str = (
+        r"\b(add|fix|implement|refactor|write "
+        r"(?:focused |regression |integration |end-to-end )?tests?|change|patch|debug|"
+        r"optimi[sz]e|upgrade|downgrade|update (?=[^\n]{0,60}\b(?:dependenc\w*|lockfile|package|pyproject|pytest|ruff|mypy|mcp)\b)|extract|restructure|support|reduce|benchmark|"
+        r"improve (?=[^\n]{0,60}\b(?:latency|throughput|performance|memory|startup)\b))\b"
+    )
     simple: str = r"\b(where|which file|explain|summari[sz]e|find|locate|inspect|what is)\b"
 
+    @field_validator("code", "simple")
+    @classmethod
+    def validate_pattern(cls, value: str, info: ValidationInfo) -> str:
+        return _validate_regex(value, field_name=info.field_name)
 
-class TelemetryConfig(BaseModel):
+    @field_validator("high_risk")
+    @classmethod
+    def validate_high_risk_patterns(cls, value: dict[str, str]) -> dict[str, str]:
+        for name, pattern in value.items():
+            _validate_regex(pattern, field_name=f"high_risk.{name}")
+        return value
+
+
+class TelemetryConfig(StrictConfigModel):
     enabled: bool = False
     log_path: Path = Path(".tgv/sessions")
 
 
-class RoutingConfig(BaseModel):
+class RoutingConfig(StrictConfigModel):
     use_local_model: bool = True
     local_answer_confidence: float = Field(default=0.82, ge=0, le=1)
     local_code_confidence: float = Field(default=0.68, ge=0, le=1)
@@ -91,7 +130,7 @@ class RoutingConfig(BaseModel):
     patterns: PatternConfig = Field(default_factory=PatternConfig)
 
 
-class RepositoryConfig(BaseModel):
+class RepositoryConfig(StrictConfigModel):
     maximum_file_bytes: int = Field(default=524_288, ge=1024)
     maximum_results: int = Field(default=20, ge=1, le=200)
     excerpt_lines: int = Field(default=120, ge=10, le=1000)
@@ -113,7 +152,7 @@ class RepositoryConfig(BaseModel):
     index_path: Path = Path(".tgv/index.json")
 
 
-class PrivacyConfig(BaseModel):
+class PrivacyConfig(StrictConfigModel):
     deny_patterns: list[str] = Field(
         default_factory=lambda: [
             "**/.env",
@@ -132,7 +171,7 @@ class PrivacyConfig(BaseModel):
     )
 
 
-class HandoffConfig(BaseModel):
+class HandoffConfig(StrictConfigModel):
     mode: HandoffMode = HandoffMode.HANDOFF_ONLY
     command: list[str] = Field(default_factory=list)
     timeout_seconds: float = Field(default=300.0, gt=0, le=3600)
@@ -148,7 +187,7 @@ class HandoffConfig(BaseModel):
         return self
 
 
-class IntelligenceConfig(BaseModel):
+class IntelligenceConfig(StrictConfigModel):
     enabled: bool = True
     outcome_database_path: Path = Path(".tgv/outcomes.sqlite3")
     retain_raw_prompts: bool = False
@@ -184,7 +223,7 @@ class IntelligenceConfig(BaseModel):
     )
 
 
-class TGVConfig(BaseModel):
+class TGVConfig(StrictConfigModel):
     version: int = 1
     models: dict[str, ModelRoleConfig]
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
@@ -198,6 +237,8 @@ class TGVConfig(BaseModel):
 class RouteDecision(BaseModel):
     route: Route
     confidence: float = Field(ge=0, le=1)
+    selected_model: str | None = None
+    selected_capability_tier: CapabilityTier | None = None
     rationale: str
     risk_signals: list[str] = Field(default_factory=list)
     search_terms: list[str] = Field(default_factory=list)

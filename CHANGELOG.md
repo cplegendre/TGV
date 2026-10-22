@@ -1,3 +1,79 @@
+## [0.32] - 2026-08-26
+
+### Added
+
+- Added graceful daemon draining with configurable in-flight shutdown grace and worker cancellation after grace expiry.
+- Added Prometheus textfile metrics export and a `tgv metrics` rendering command.
+- Added `tgv explain` counterfactual route explanations showing why a route won and what could make alternatives win.
+- Added `tgv benchmark outcomes` for real outcome-ledger quality evidence with enforceable sample/success/safety thresholds.
+- Added owner-only atomic writes for operational status, metrics, repository indexes, telemetry, and context bundles on supported filesystems.
+
+### Changed
+
+- Daemon status now exposes explicit `starting`, `ready`, `draining`, and `stopped` lifecycle states plus cancelled-request counts.
+- Health reporting distinguishes a draining daemon from a generic not-ready state.
+- Outcome evaluation reports aggregate and per-model/per-tier/per-category verified success, acceptance, rework, retry, safety, latency, and cost evidence.
+
+### Fixed
+
+- Fixed shutdown signals being unable to interrupt an idle blocking stdin read promptly by moving input reading to a bounded daemon thread.
+- Fixed an in-flight route having no graceful shutdown budget when SIGTERM/SIGINT arrives.
+- Fixed local operational files being written non-atomically or with potentially broader default filesystem permissions.
+
+## [0.31] - 2026-08-26
+
+### Added
+
+- Added a persistent isolated route worker with a cross-platform `spawn` lifecycle and restart-on-timeout cancellation semantics.
+- Added worker readiness handshakes so daemon readiness is reported only after routing initialization completes.
+- Added heartbeat/readiness status, request counters, route counts, worker restart state, and bounded routing/provider latency metrics.
+- Added `tgv health --status-file ...` for heartbeat-based readiness checks.
+- Added optional privacy-minimal JSONL operational diagnostics through `tgv serve --diagnostics-file`.
+- Expanded the integrated routing-intelligence corpus from 6 to 104 labeled cases across all task categories.
+- Added an enforceable integrated benchmark release gate and wired it into CI.
+- Added production operations/deployment guidance.
+
+### Changed
+
+- Local provider calls now expose call/error/latency metrics through service operational snapshots.
+- Task profiling now applies category-specific minimum complexity levels and more robust intent/category matching.
+- Ambiguous/uncertain routing signals were strengthened while preserving mandatory high-risk escalation.
+- Atomic status writes now use unique temporary names so heartbeat and request updates cannot race on one temp file.
+
+### Fixed
+
+- Fixed non-POSIX request timeouts returning while the underlying routing thread could continue running.
+- Fixed daemon readiness becoming true before the routing worker had actually initialized.
+- Fixed a fork-after-threads deadlock risk by standardizing worker startup on `spawn`.
+- Fixed worker replacement work extending the timed-out request path; timed-out workers are terminated before the timeout response and reconstructed on the next request.
+
+## [0.30] - 2026-08-26
+
+### Added
+
+- Added explicit `selected_model` and `selected_capability_tier` execution-plan fields to route decisions.
+- Added repository-scoped adaptive scoreboard selection and outcome recording of the selected model.
+- Added read-only service mode used by MCP to suppress index, outcome, and telemetry persistence.
+- Added command-argument redaction for common secret-bearing flags and bounded subprocess stream capture.
+- Added SQLite WAL/busy-timeout hardening for outcome persistence.
+
+### Fixed
+
+- Fixed stdio request timeouts being checked only after routing completed; POSIX serving now enforces an in-flight deadline.
+- Fixed `intelligence.enabled: false` continuing to run adaptive routing and create outcome state.
+- Fixed unknown configuration fields being silently ignored.
+- Fixed malformed configurable regexes surviving startup and crashing routing later.
+- Fixed scoreboard `recommended_model` being calculated but not reflected in the effective execution plan.
+- Fixed MCP read-only tools writing repository index/outcome/telemetry state.
+- Fixed ignored directories being traversed before exclusion.
+- Fixed external handoff output being fully buffered before truncation.
+- Fixed unverified completed outcomes being counted as successful historical evidence.
+
+### Changed
+
+- CI installs the MCP extra so MCP integration is exercised in the primary quality matrix.
+- Human-readable token-value language now identifies local-token metrics as proxies rather than measured savings.
+
 ## [0.29] - 2026-07-29
 
 ### Added

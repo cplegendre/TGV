@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -147,18 +146,15 @@ def test_command_provider_validation_and_failures(
     with pytest.raises(ProviderUnavailableError):
         provider.invoke(str(tmp_path / "h.md"), str(tmp_path / "b.json"))
 
-    def timeout(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.TimeoutExpired("x", 1)
-
-    monkeypatch.setattr(subprocess, "run", timeout)
     with pytest.raises(CommandExecutionError, match="timed out"):
-        CommandHandoffProvider([sys.executable], 0.01).invoke("h", "j")
+        CommandHandoffProvider(
+            [sys.executable, "-c", "import time; time.sleep(1)"], 0.01
+        ).invoke("h", "j")
 
-    monkeypatch.setattr(
-        subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 3, "", "bad")
-    )
     with pytest.raises(CommandExecutionError, match="exit code 3"):
-        CommandHandoffProvider([sys.executable]).invoke("h", "j")
+        CommandHandoffProvider(
+            [sys.executable, "-c", "import sys; print('bad', file=sys.stderr); sys.exit(3)"]
+        ).invoke("h", "j")
 
 
 def test_handoff_config_rejects_nul() -> None:
@@ -243,19 +239,13 @@ def test_cli_efficiency_nonempty_text(
 
 
 def test_optional_ter_analyzer_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    import types
+    from tgv.efficiency import TERAnalysis, _ter_analyzer
 
-    module = types.ModuleType("ter_calculator.analyze_pipeline")
-    module.default_analyze_args = lambda path: {"path": path}  # type: ignore[attr-defined]
-    module.analyze_session = lambda args: SimpleNamespace(
-        aggregate_ter=1, aligned_tokens=1, waste_tokens=0
-    )  # type: ignore[attr-defined]
-    package = types.ModuleType("ter_calculator")
-    monkeypatch.setitem(sys.modules, "ter_calculator", package)
-    monkeypatch.setitem(sys.modules, "ter_calculator.analyze_pipeline", module)
-    from tgv.efficiency import _ter_analyzer
-
-    result = _ter_analyzer()(tmp_path / "x.jsonl")
+    monkeypatch.setattr(
+        "tgv.efficiency._run_ter_analysis",
+        lambda executable, path, timeout: TERAnalysis(1, 1, 0),
+    )
+    result = _ter_analyzer(executable="fake-ter")(tmp_path / "x.jsonl")
     assert result.aligned_tokens == 1
 
 
@@ -308,6 +298,12 @@ def test_repository_read_oserror_and_search_excerpt_skip(
 
 def test_repository_enumeration_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = Repository(tmp_path, default_config().repository, [])
-    monkeypatch.setattr(Path, "rglob", lambda self, pattern: (_ for _ in ()).throw(OSError("x")))
+
+    def broken_walk(*args: object, **kwargs: object):
+        onerror = kwargs["onerror"]
+        onerror(OSError("x"))
+        yield from ()
+
+    monkeypatch.setattr("tgv.repository.os.walk", broken_walk)
     with pytest.raises(RepositoryAccessError, match="enumerate"):
         repo.list_files()

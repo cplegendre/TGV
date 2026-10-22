@@ -22,8 +22,12 @@ class RoutingScoreboard:
         self.ledger = ledger
         self.config = config
 
-    def recommend(self, profile: TaskProfile) -> ScoreboardRecommendation:
-        records = self.ledger.query(category=profile.task_category, limit=10000)
+    def recommend(
+        self, profile: TaskProfile, *, repository_id: str | None = None
+    ) -> ScoreboardRecommendation:
+        records = self.ledger.query(
+            category=profile.task_category, repository_id=repository_id, limit=10000
+        )
         groups: dict[tuple[str, CapabilityTier], list[OutcomeTask]] = defaultdict(list)
         for record in records:
             if record.selected_model and record.selected_capability_tier:
@@ -118,7 +122,13 @@ class RoutingScoreboard:
             return 0
         if record.human_accepted is False or record.rework_required is True:
             return 0
-        return 1
+        observed_quality = (
+            record.tests_passed is not None
+            or record.static_checks_passed is not None
+            or record.human_accepted is not None
+            or record.rework_required is not None
+        )
+        return int(observed_quality)
 
     @staticmethod
     def _boolean_rate(records: list[OutcomeTask], field: str) -> float:

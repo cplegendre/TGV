@@ -67,7 +67,7 @@ def test_demo_keep_data_and_default_cleanup(capsys: pytest.CaptureFixture[str]) 
     assert "TGV synthetic demo" in text
     assert "Workspace:" in text
     assert "Result - PASS : 450/450 100.0% success" in text
-    assert "Estimated avoided frontier-token share:" in text
+    assert "Local-routed token share (proxy):" in text
     assert "Scale: small" in text
     assert "Routing throughput:" in text
     assert "local-fast-001" not in text
@@ -183,7 +183,9 @@ def test_demo_rejects_non_positive_task_count(tmp_path: Path) -> None:
 
 
 def test_demo_expands_canonical_tasks_deterministically() -> None:
-    canonical = [{"id": "one", "request": "Summarize this module", "expected_route": "local_fast"}]
+    canonical = [
+        {"id": "one", "request": "Summarize this module", "expected_route": "local_fast"}
+    ]
     assert _expanded_task(canonical, 0) == canonical[0]
     assert _expanded_task(canonical, 1) == {
         "id": "one--variant-00001",

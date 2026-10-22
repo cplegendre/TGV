@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from tgv.models import RouteDecision
+from tgv.observability import atomic_text
 
 
 class SessionRecorder:
@@ -84,11 +85,11 @@ class SessionRecorder:
 
         self.log_directory.mkdir(parents=True, exist_ok=True)
         path = self.log_directory / f"{session_id}.jsonl"
-        path.write_text(
+        atomic_text(
+            path,
             "\n".join(
                 json.dumps(entry, separators=(",", ":")) for entry in (user_entry, assistant_entry)
             )
             + "\n",
-            encoding="utf-8",
         )
         return path

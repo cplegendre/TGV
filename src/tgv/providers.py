@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import BinaryIO, Protocol
 
 import httpx
 
@@ -236,6 +236,45 @@ class CommandHandoffProvider:
     def _bounded(value: str, limit: int = 2000) -> str:
         return value.strip()[:limit]
 
+    @staticmethod
+    def _redacted_command(command: list[str]) -> list[str]:
+        sensitive = (
+            "token",
+            "secret",
+            "password",
+            "passwd",
+            "api-key",
+            "api_key",
+            "credential",
+        )
+        redacted: list[str] = []
+        hide_next = False
+        for part in command:
+            lowered = part.lower()
+            if hide_next:
+                redacted.append("<redacted>")
+                hide_next = False
+                continue
+            if part.startswith("-") and any(marker in lowered for marker in sensitive):
+                if "=" in part:
+                    key, _value = part.split("=", 1)
+                    redacted.append(f"{key}=<redacted>")
+                else:
+                    redacted.append(part)
+                    hide_next = True
+                continue
+            redacted.append(part)
+        return redacted
+
+    @staticmethod
+    def _capture_stream(stream: BinaryIO, output: bytearray, limit: int = 2000) -> None:
+        while True:
+            chunk = stream.read(4096)
+            if not chunk:
+                break
+            if len(output) < limit:
+                output.extend(chunk[: limit - len(output)])
+
     def _ingest_result(self, metadata: ProviderLifecycle) -> ProviderLifecycle:
         if self.result_path is None:
             return metadata
@@ -272,6 +311,7 @@ class CommandHandoffProvider:
         dry_run: bool = False,
     ) -> ProviderLifecycle:
         import subprocess
+        from threading import Thread
 
         from tgv.exceptions import CommandExecutionError, ProviderUnavailableError
 
@@ -280,7 +320,7 @@ class CommandHandoffProvider:
         metadata = ProviderLifecycle(
             provider_name=self.provider_name,
             mode=HandoffMode.COMMAND,
-            command=command,
+            command=self._redacted_command(command),
             dry_run=dry_run,
             started_at=started,
             command_status="dry-run" if dry_run else "running",
@@ -289,34 +329,57 @@ class CommandHandoffProvider:
             return metadata.model_copy(
                 update={"completed_at": self._timestamp(), "command_status": "dry-run"}
             )
+
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
-                check=False,
-                timeout=self.timeout_seconds,
-                text=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 shell=False,
             )
         except FileNotFoundError as exc:
             raise ProviderUnavailableError(f"Handoff command is unavailable: {command[0]}") from exc
+
+        stdout = bytearray()
+        stderr = bytearray()
+        assert process.stdout is not None
+        assert process.stderr is not None
+        stdout_thread = Thread(
+            target=self._capture_stream, args=(process.stdout, stdout), daemon=True
+        )
+        stderr_thread = Thread(
+            target=self._capture_stream, args=(process.stderr, stderr), daemon=True
+        )
+        stdout_thread.start()
+        stderr_thread.start()
+        try:
+            return_code = process.wait(timeout=self.timeout_seconds)
         except subprocess.TimeoutExpired as exc:
+            process.kill()
+            process.wait()
             raise CommandExecutionError(
                 f"Handoff command timed out after {self.timeout_seconds:g} seconds"
             ) from exc
+        finally:
+            stdout_thread.join()
+            stderr_thread.join()
+            process.stdout.close()
+            process.stderr.close()
+        stdout_text = stdout.decode(errors="replace")
+        stderr_text = stderr.decode(errors="replace")
         metadata = metadata.model_copy(
             update={
                 "completed_at": self._timestamp(),
-                "exit_code": completed.returncode,
-                "stdout_excerpt": self._bounded(completed.stdout),
-                "stderr_excerpt": self._bounded(completed.stderr),
-                "command_status": "succeeded" if completed.returncode == 0 else "failed",
+                "exit_code": return_code,
+                "stdout_excerpt": self._bounded(stdout_text),
+                "stderr_excerpt": self._bounded(stderr_text),
+                "command_status": "succeeded" if return_code == 0 else "failed",
             }
         )
-        if completed.returncode != 0:
+        if return_code != 0:
             detail = metadata.stderr_excerpt or metadata.stdout_excerpt or "no diagnostic output"
             raise CommandExecutionError(
-                f"Handoff command failed with exit code {completed.returncode}: {detail[:500]}"
+                f"Handoff command failed with exit code {return_code}: {detail[:500]}"
             )
         return self._ingest_result(metadata)
 

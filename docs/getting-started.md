@@ -73,7 +73,7 @@ Telemetry is privacy-minimal but includes request text and routing metadata. Rev
 tgv report --sessions .tgv/sessions --json
 ```
 
-The report includes the stable machine-readable fields `local_share`, `savings_tokens`, and `savings_ratio`. In human-readable demo output, `savings_ratio` is labeled “Estimated avoided frontier-token share” and formatted as a percentage. By default
+The report keeps the stable machine-readable fields `local_share`, `savings_tokens`, and `savings_ratio` for compatibility. These fields are routing/token-allocation proxies, not a measured counterfactual of frontier usage. Human-readable demo output labels them as local-routed token volume/share proxies. By default
 this works immediately with no extra install, using the coarse token estimates already
 recorded in telemetry. For more precise aligned/waste-token scoring, install the optional
 TER integration and add `--ter`:
@@ -86,7 +86,10 @@ tgv report --sessions .tgv/sessions --ter --json
 ## Start the stdio service
 
 ```bash
-tgv serve --repo . --status-file .tgv/status.json --request-timeout 120
+tgv serve --repo . \
+  --status-file .tgv/status.json \
+  --diagnostics-file .tgv/diagnostics.jsonl \
+  --request-timeout 120
 ```
 
 Send one JSON object per line:
@@ -95,4 +98,11 @@ Send one JSON object per line:
 {"request":"Where is authentication configured?"}
 ```
 
-Responses are written to stdout. Structured operational logs are written to stderr. Requests are processed sequentially, the status file is replaced atomically, and SIGTERM/SIGINT causes TGV to finish the current request before exiting cleanly.
+Responses are written to stdout and structured request logs to stderr. Routing runs in an isolated persistent worker process. The daemon is marked ready only after that worker completes its startup handshake. If `--request-timeout` expires, the worker is terminated before the timeout is returned, on every supported platform; the next request starts a clean worker. The status file is updated atomically and includes heartbeat, request counters, route counts, worker restarts, and routing/provider metrics. Optional diagnostics JSONL contains operational metadata but not request text or repository contents.
+
+Check readiness from another process with `tgv health --status-file .tgv/status.json --max-age 15 --json`. See `docs/operations.md` for deployment and monitoring guidance.
+
+
+## Read-only MCP mode
+
+`tgv-mcp --repo .` uses an explicit read-only service mode. MCP repository search and context preparation do not persist `.tgv/index.json`, outcome records, or telemetry.
