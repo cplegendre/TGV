@@ -83,6 +83,12 @@ pip install "tgv-agent[ter]"
 tgv report --sessions .tgv/sessions --ter --json
 ```
 
+The TER extra includes embedding dependencies; real analysis may still need to
+download an embedding model on first use. TGV's generated routing telemetry is
+synthetic and is **not** a transcript of downstream coding-agent work. Thus `--ter`
+on that telemetry does not measure coding-agent execution efficiency.
+See [TER integration](ter-integration.md) for checks and limitations.
+
 ## Start the stdio service
 
 ```bash

@@ -28,7 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.10,<2"]
-ter = ["ter-calculator @ git+https://github.com/cplegendre/TER.git@v3.0.0"]
+ter = ["ter-calculator[embeddings] @ git+https://github.com/cplegendre/TER.git@v3.0.0"]
 dev = [
   "build>=1.2,<2",
   "mypy>=1.11,<2",
