@@ -223,12 +223,22 @@ Install the optional TER integration before scoring sessions:
 python -m pip install -e ".[ter]"
 ```
 
+This installs the verified TER 3.0.0 package with its `embeddings` extra.
+The first real analysis may download an embedding model and requires network access
+unless its model files are already cached. See [TER integration](docs/ter-integration.md)
+for installation checks and limitations.
+
 ### Report efficiency by route
 
 ```bash
 tgv efficiency --sessions .tgv/sessions
 tgv efficiency --sessions .tgv/sessions --format json
 ```
+
+Warning: TGV's built-in telemetry is synthetic routing narration, not a downstream
+coding-agent transcript. TER scores the input JSONL, so these numbers are **not**
+evidence of real coding-agent execution efficiency unless real session logs are supplied
+and reliably associated with the route. Session linking is future work.
 
 The report groups sessions by `local_fast`, `local_code`, `frontier_standard`, and `frontier_deep`, showing aggregate
 TER, aligned tokens, waste tokens, and session count. Higher TER indicates a larger share
