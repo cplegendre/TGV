@@ -304,6 +304,42 @@ class OutcomeTask(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExecutionAttempt(BaseModel):
+    """One durable execution attempt attributed to an outcome task."""
+
+    attempt_id: str
+    task_id: str
+    repository_id: str
+    routing_decision_id: str | None = None
+    attempt_number: int = Field(ge=1)
+    started_at: datetime
+    completed_at: datetime | None = None
+    status: str = "pending"
+
+
+class AgentSessionLink(BaseModel):
+    """Opaque reference to an external agent session, never its contents."""
+
+    session_link_id: str
+    attempt_id: str
+    agent: str
+    external_session_id: str
+    content_hash: str | None = None
+    linked_at: datetime
+
+
+class TerMeasurement(BaseModel):
+    """Aggregate efficiency metrics linked to one attempt; no TER internals."""
+
+    measurement_id: str
+    attempt_id: str
+    session_link_id: str | None = None
+    analyzer: str
+    analyzer_version: str
+    measured_at: datetime
+    metrics: dict[str, float | int | None] = Field(default_factory=dict)
+
+
 class CandidateScore(BaseModel):
     model: str
     capability_tier: CapabilityTier

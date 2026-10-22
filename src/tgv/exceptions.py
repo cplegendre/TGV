@@ -24,3 +24,23 @@ class CommandExecutionError(TGVError):
 
 class ValidationFailure(TGVError):
     """Raised when validation cannot be completed successfully."""
+
+
+class OutcomeCorrelationError(TGVError):
+    """Raised when a durable task/execution correlation record is invalid."""
+
+
+class CrossRepositoryError(OutcomeCorrelationError):
+    """Raised when a correlation record would mix repository identities."""
+
+
+class CorrelationMismatchError(OutcomeCorrelationError):
+    """Raised when a correlation record references a different task or attempt."""
+
+
+class ConflictingSessionLinkError(OutcomeCorrelationError):
+    """Raised when an external session identifier is already linked elsewhere."""
+
+
+class ConflictingMeasurementError(OutcomeCorrelationError):
+    """Raised when a measurement already exists with different content."""

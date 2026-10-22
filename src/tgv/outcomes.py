@@ -4,18 +4,35 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
+import re
 import sqlite3
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from contextlib import closing, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tgv.models import CapabilityTier, OutcomeTask, TaskCategory, TaskProfile
+from tgv.exceptions import (
+    ConflictingMeasurementError,
+    ConflictingSessionLinkError,
+    CorrelationMismatchError,
+    CrossRepositoryError,
+)
+from tgv.models import (
+    AgentSessionLink,
+    CapabilityTier,
+    ExecutionAttempt,
+    OutcomeTask,
+    TaskCategory,
+    TaskProfile,
+    TerMeasurement,
+)
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
+_CONTENT_HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
 class OutcomeLedger:
@@ -33,6 +50,7 @@ class OutcomeLedger:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout = 5000")
         connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("PRAGMA foreign_keys = ON")
         self._initialize(connection)
         return connection
 
@@ -44,49 +62,137 @@ class OutcomeLedger:
             )
             row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
             if row is None:
+                OutcomeLedger._create_v1_schema(connection)
+                OutcomeLedger._create_v2_schema(connection)
                 connection.execute(
                     "INSERT INTO schema_version(version) VALUES (?)", (_SCHEMA_VERSION,)
                 )
-            elif int(row[0]) != _SCHEMA_VERSION:
-                raise RuntimeError(f"Unsupported outcome schema version: {row[0]}")
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS outcomes (
-                    task_id TEXT PRIMARY KEY,
-                    timestamp TEXT NOT NULL,
-                    repository_id TEXT NOT NULL,
-                    request_hash TEXT NOT NULL,
-                    raw_request TEXT,
-                    task_category TEXT NOT NULL,
-                    initial_complexity_score REAL,
-                    revised_complexity_score REAL,
-                    routing_confidence REAL,
-                    selected_model TEXT,
-                    selected_capability_tier TEXT,
-                    routing_reasons TEXT NOT NULL DEFAULT '[]',
-                    retrieved_files TEXT NOT NULL DEFAULT '[]',
-                    retrieved_symbols TEXT NOT NULL DEFAULT '[]',
-                    context_token_estimate INTEGER,
-                    execution_status TEXT NOT NULL DEFAULT 'pending',
-                    tests_passed INTEGER,
-                    static_checks_passed INTEGER,
-                    human_accepted INTEGER,
-                    rework_required INTEGER,
-                    retry_count INTEGER NOT NULL DEFAULT 0,
-                    latency_seconds REAL,
-                    input_tokens INTEGER,
-                    output_tokens INTEGER,
-                    estimated_cost REAL,
-                    failure_category TEXT,
-                    safety_violation INTEGER,
-                    metadata TEXT NOT NULL DEFAULT '{}'
-                )
-                """
+                return
+            version = int(row[0])
+            if version > _SCHEMA_VERSION:
+                raise RuntimeError(f"Unsupported outcome schema version: {version}")
+            if version == 1:
+                OutcomeLedger._migrate_v1_to_v2(connection)
+                connection.execute("UPDATE schema_version SET version = ?", (_SCHEMA_VERSION,))
+                return
+            OutcomeLedger._create_v1_schema(connection)
+            OutcomeLedger._create_v2_schema(connection)
+
+    @staticmethod
+    def _create_v1_schema(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS outcomes (
+                task_id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                repository_id TEXT NOT NULL,
+                request_hash TEXT NOT NULL,
+                raw_request TEXT,
+                task_category TEXT NOT NULL,
+                initial_complexity_score REAL,
+                revised_complexity_score REAL,
+                routing_confidence REAL,
+                selected_model TEXT,
+                selected_capability_tier TEXT,
+                routing_reasons TEXT NOT NULL DEFAULT '[]',
+                retrieved_files TEXT NOT NULL DEFAULT '[]',
+                retrieved_symbols TEXT NOT NULL DEFAULT '[]',
+                context_token_estimate INTEGER,
+                execution_status TEXT NOT NULL DEFAULT 'pending',
+                tests_passed INTEGER,
+                static_checks_passed INTEGER,
+                human_accepted INTEGER,
+                rework_required INTEGER,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                latency_seconds REAL,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                estimated_cost REAL,
+                failure_category TEXT,
+                safety_violation INTEGER,
+                metadata TEXT NOT NULL DEFAULT '{}'
             )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS outcomes_segment "
-                "ON outcomes(task_category, selected_model, selected_capability_tier)"
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS outcomes_segment "
+            "ON outcomes(task_category, selected_model, selected_capability_tier)"
+        )
+
+    @staticmethod
+    def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
+        OutcomeLedger._create_v1_schema(connection)
+        OutcomeLedger._create_v2_schema(connection)
+        connection.execute(
+            "UPDATE outcomes SET routing_decision_id = lower(hex(randomblob(16))) "
+            "WHERE routing_decision_id IS NULL AND selected_model IS NOT NULL"
+        )
+
+    @staticmethod
+    def _create_v2_schema(connection: sqlite3.Connection) -> None:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(outcomes)")}
+        if "routing_decision_id" not in columns:
+            try:
+                connection.execute("ALTER TABLE outcomes ADD COLUMN routing_decision_id TEXT")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc):
+                    raise
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS outcomes_routing_decision "
+            "ON outcomes(routing_decision_id)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS execution_attempts (
+                attempt_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL REFERENCES outcomes(task_id) ON DELETE CASCADE,
+                repository_id TEXT NOT NULL,
+                routing_decision_id TEXT,
+                attempt_number INTEGER NOT NULL CHECK (attempt_number >= 1),
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                UNIQUE (task_id, attempt_number)
             )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_sessions (
+                session_link_id TEXT PRIMARY KEY,
+                attempt_id TEXT NOT NULL
+                    REFERENCES execution_attempts(attempt_id) ON DELETE CASCADE,
+                agent TEXT NOT NULL CHECK (length(trim(agent)) > 0),
+                external_session_id TEXT NOT NULL
+                    CHECK (length(trim(external_session_id)) > 0),
+                content_hash TEXT CHECK (content_hash IS NULL OR length(content_hash) = 64),
+                linked_at TEXT NOT NULL,
+                UNIQUE (agent, external_session_id)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS agent_sessions_attempt ON agent_sessions(attempt_id)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ter_measurements (
+                measurement_id TEXT PRIMARY KEY,
+                attempt_id TEXT NOT NULL
+                    REFERENCES execution_attempts(attempt_id) ON DELETE CASCADE,
+                session_link_id TEXT
+                    REFERENCES agent_sessions(session_link_id) ON DELETE CASCADE,
+                analyzer TEXT NOT NULL CHECK (length(trim(analyzer)) > 0),
+                analyzer_version TEXT NOT NULL CHECK (length(trim(analyzer_version)) > 0),
+                measured_at TEXT NOT NULL,
+                metrics TEXT NOT NULL DEFAULT '{}',
+                UNIQUE (attempt_id, analyzer, analyzer_version)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS ter_measurements_attempt ON ter_measurements(attempt_id)"
+        )
 
     @staticmethod
     def repository_id(root: Path) -> str:
@@ -137,6 +243,7 @@ class OutcomeLedger:
         symbols: list[str],
         context_token_estimate: int,
     ) -> None:
+        self.assign_routing_decision_id(task_id)
         self._update(
             task_id,
             revised_complexity_score=revised_profile.complexity_score,
@@ -201,6 +308,329 @@ class OutcomeLedger:
                 "execution_status = ? WHERE task_id = ?",
                 ("escalated" if escalated else "retrying", task_id),
             )
+
+    def routing_decision_id_for(self, task_id: str) -> str | None:
+        """Return the durable routing-decision identifier for a task, if any."""
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT routing_decision_id FROM outcomes WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown task id: {task_id}")
+        value = row["routing_decision_id"]
+        return None if value is None else str(value)
+
+    def assign_routing_decision_id(self, task_id: str) -> str:
+        """Assign and return a stable routing-decision identifier for a task."""
+        candidate = str(uuid.uuid4())
+        with closing(self._connect()) as connection, connection:
+            cursor = connection.execute(
+                "UPDATE outcomes SET routing_decision_id = COALESCE(routing_decision_id, ?) "
+                "WHERE task_id = ?",
+                (candidate, task_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(f"Unknown task id: {task_id}")
+            row = connection.execute(
+                "SELECT routing_decision_id FROM outcomes WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        return str(row["routing_decision_id"])
+
+    def create_execution_attempt(
+        self,
+        task_id: str,
+        *,
+        expected_repository_id: str | None = None,
+        started_at: datetime | None = None,
+        status: str = "pending",
+    ) -> ExecutionAttempt:
+        """Create the next execution attempt for an existing task."""
+        if not status.strip():
+            raise ValueError("Execution attempt status must not be empty")
+        last_error: sqlite3.IntegrityError | None = None
+        for _ in range(3):
+            try:
+                return self._create_execution_attempt(
+                    task_id,
+                    expected_repository_id=expected_repository_id,
+                    started_at=started_at,
+                    status=status,
+                )
+            except sqlite3.IntegrityError as exc:
+                last_error = exc
+                continue
+        raise RuntimeError(
+            f"Could not allocate an execution attempt for task: {task_id}"
+        ) from last_error
+
+    def _create_execution_attempt(
+        self,
+        task_id: str,
+        *,
+        expected_repository_id: str | None,
+        started_at: datetime | None,
+        status: str,
+    ) -> ExecutionAttempt:
+        with closing(self._connect()) as connection, connection:
+            task = connection.execute(
+                "SELECT repository_id, routing_decision_id FROM outcomes WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None:
+                raise KeyError(f"Unknown task id: {task_id}")
+            repository_id = str(task["repository_id"])
+            if expected_repository_id is not None and expected_repository_id != repository_id:
+                raise CrossRepositoryError(
+                    "Execution attempt repository does not match the task repository"
+                )
+            attempt_number = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(attempt_number), 0) + 1 "
+                    "FROM execution_attempts WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()[0]
+            )
+            attempt = ExecutionAttempt(
+                attempt_id=str(uuid.uuid4()),
+                task_id=task_id,
+                repository_id=repository_id,
+                routing_decision_id=(
+                    None
+                    if task["routing_decision_id"] is None
+                    else str(task["routing_decision_id"])
+                ),
+                attempt_number=attempt_number,
+                started_at=started_at or datetime.now(UTC),
+                status=status.strip(),
+            )
+            connection.execute(
+                "INSERT INTO execution_attempts (attempt_id, task_id, repository_id, "
+                "routing_decision_id, attempt_number, started_at, completed_at, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    attempt.attempt_id,
+                    attempt.task_id,
+                    attempt.repository_id,
+                    attempt.routing_decision_id,
+                    attempt.attempt_number,
+                    attempt.started_at.isoformat(),
+                    None,
+                    attempt.status,
+                ),
+            )
+        return attempt
+
+    def update_execution_attempt(
+        self,
+        attempt_id: str,
+        *,
+        status: str,
+        completed_at: datetime | None = None,
+    ) -> None:
+        """Record a new status for an existing execution attempt."""
+        if not status.strip():
+            raise ValueError("Execution attempt status must not be empty")
+        with closing(self._connect()) as connection, connection:
+            if completed_at is None:
+                cursor = connection.execute(
+                    "UPDATE execution_attempts SET status = ? WHERE attempt_id = ?",
+                    (status.strip(), attempt_id),
+                )
+            else:
+                cursor = connection.execute(
+                    "UPDATE execution_attempts SET status = ?, completed_at = ? "
+                    "WHERE attempt_id = ?",
+                    (status.strip(), completed_at.isoformat(), attempt_id),
+                )
+            if cursor.rowcount == 0:
+                raise KeyError(f"Unknown attempt id: {attempt_id}")
+
+    def link_agent_session(
+        self,
+        attempt_id: str,
+        *,
+        agent: str,
+        external_session_id: str,
+        content_hash: str | None = None,
+        linked_at: datetime | None = None,
+    ) -> AgentSessionLink:
+        """Link an opaque external agent-session reference to an execution attempt."""
+        agent_name = agent.strip()
+        session_id = external_session_id.strip()
+        if not agent_name:
+            raise ValueError("Agent name must not be empty")
+        if not session_id:
+            raise ValueError("External session id must not be empty")
+        normalized_hash = None if content_hash is None else content_hash.lower()
+        if normalized_hash is not None and not _CONTENT_HASH.fullmatch(normalized_hash):
+            raise ValueError("content_hash must be a sha256 hex digest")
+        with closing(self._connect()) as connection, connection:
+            attempt = connection.execute(
+                "SELECT attempt_id FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
+            ).fetchone()
+            if attempt is None:
+                raise KeyError(f"Unknown attempt id: {attempt_id}")
+            link = AgentSessionLink(
+                session_link_id=str(uuid.uuid4()),
+                attempt_id=attempt_id,
+                agent=agent_name,
+                external_session_id=session_id,
+                content_hash=normalized_hash,
+                linked_at=linked_at or datetime.now(UTC),
+            )
+            try:
+                connection.execute(
+                    "INSERT INTO agent_sessions (session_link_id, attempt_id, agent, "
+                    "external_session_id, content_hash, linked_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        link.session_link_id,
+                        link.attempt_id,
+                        link.agent,
+                        link.external_session_id,
+                        link.content_hash,
+                        link.linked_at.isoformat(),
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                existing = connection.execute(
+                    "SELECT * FROM agent_sessions WHERE agent = ? AND external_session_id = ?",
+                    (agent_name, session_id),
+                ).fetchone()
+                if existing is None:
+                    raise
+                if existing["attempt_id"] != attempt_id or (
+                    normalized_hash is not None and existing["content_hash"] != normalized_hash
+                ):
+                    raise ConflictingSessionLinkError(
+                        "External session id is already linked to a different attempt"
+                    ) from exc
+                return self._row_to_session_link(existing)
+        return link
+
+    def record_ter_measurement(
+        self,
+        attempt_id: str,
+        *,
+        analyzer: str,
+        analyzer_version: str,
+        metrics: Mapping[str, float | int | None] | None = None,
+        session_link_id: str | None = None,
+        measured_at: datetime | None = None,
+    ) -> TerMeasurement:
+        """Persist numeric TER-style measurements without storing TER internals."""
+        analyzer_name = analyzer.strip()
+        version = analyzer_version.strip()
+        if not analyzer_name:
+            raise ValueError("Analyzer name must not be empty")
+        if not version:
+            raise ValueError("Analyzer version must not be empty")
+        normalized_metrics = self._normalize_metrics(metrics or {})
+        metrics_json = json.dumps(normalized_metrics, sort_keys=True)
+        with closing(self._connect()) as connection, connection:
+            attempt = connection.execute(
+                "SELECT attempt_id FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
+            ).fetchone()
+            if attempt is None:
+                raise KeyError(f"Unknown attempt id: {attempt_id}")
+            if session_link_id is not None:
+                link = connection.execute(
+                    "SELECT attempt_id FROM agent_sessions WHERE session_link_id = ?",
+                    (session_link_id,),
+                ).fetchone()
+                if link is None:
+                    raise KeyError(f"Unknown session link id: {session_link_id}")
+                if link["attempt_id"] != attempt_id:
+                    raise CorrelationMismatchError(
+                        "Session link belongs to a different execution attempt"
+                    )
+            measurement = TerMeasurement(
+                measurement_id=str(uuid.uuid4()),
+                attempt_id=attempt_id,
+                session_link_id=session_link_id,
+                analyzer=analyzer_name,
+                analyzer_version=version,
+                measured_at=measured_at or datetime.now(UTC),
+                metrics=normalized_metrics,
+            )
+            try:
+                connection.execute(
+                    "INSERT INTO ter_measurements (measurement_id, attempt_id, session_link_id, "
+                    "analyzer, analyzer_version, measured_at, metrics) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        measurement.measurement_id,
+                        measurement.attempt_id,
+                        measurement.session_link_id,
+                        measurement.analyzer,
+                        measurement.analyzer_version,
+                        measurement.measured_at.isoformat(),
+                        metrics_json,
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                existing = connection.execute(
+                    "SELECT * FROM ter_measurements WHERE attempt_id = ? "
+                    "AND analyzer = ? AND analyzer_version = ?",
+                    (attempt_id, analyzer_name, version),
+                ).fetchone()
+                if existing is None:
+                    raise
+                if (
+                    existing["session_link_id"] != session_link_id
+                    or existing["metrics"] != metrics_json
+                ):
+                    raise ConflictingMeasurementError(
+                        "A different measurement already exists for this attempt and analyzer"
+                    ) from exc
+                return self._row_to_measurement(existing)
+        return measurement
+
+    @staticmethod
+    def _normalize_metrics(
+        metrics: Mapping[str, float | int | None],
+    ) -> dict[str, float | int | None]:
+        normalized: dict[str, float | int | None] = {}
+        for key, value in metrics.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("Metric names must be non-empty strings")
+            if value is None:
+                normalized[key] = None
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"Metric {key!r} must be a finite number or null")
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"Metric {key!r} must be a finite number or null")
+            normalized[key] = value
+        return dict(sorted(normalized.items()))
+
+    def execution_attempts(self, task_id: str) -> list[ExecutionAttempt]:
+        """Return execution attempts recorded for a task, ordered by attempt number."""
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                "SELECT * FROM execution_attempts WHERE task_id = ? ORDER BY attempt_number",
+                (task_id,),
+            ).fetchall()
+        return [self._row_to_attempt(row) for row in rows]
+
+    def agent_sessions(self, attempt_id: str) -> list[AgentSessionLink]:
+        """Return external agent-session links recorded for an attempt."""
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                "SELECT * FROM agent_sessions WHERE attempt_id = ? "
+                "ORDER BY linked_at, session_link_id",
+                (attempt_id,),
+            ).fetchall()
+        return [self._row_to_session_link(row) for row in rows]
+
+    def ter_measurements(self, attempt_id: str) -> list[TerMeasurement]:
+        """Return TER-style measurements recorded for an attempt."""
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                "SELECT * FROM ter_measurements WHERE attempt_id = ? "
+                "ORDER BY measured_at, measurement_id",
+                (attempt_id,),
+            ).fetchall()
+        return [self._row_to_measurement(row) for row in rows]
 
     def _update(self, task_id: str, **values: Any) -> None:
         if not values:
@@ -313,4 +743,44 @@ class OutcomeLedger:
             failure_category=row["failure_category"],
             safety_violation=optional_bool("safety_violation"),
             metadata=json.loads(row["metadata"]),
+        )
+
+    @staticmethod
+    def _row_to_attempt(row: sqlite3.Row) -> ExecutionAttempt:
+        return ExecutionAttempt(
+            attempt_id=row["attempt_id"],
+            task_id=row["task_id"],
+            repository_id=row["repository_id"],
+            routing_decision_id=row["routing_decision_id"],
+            attempt_number=row["attempt_number"],
+            started_at=datetime.fromisoformat(row["started_at"]),
+            completed_at=(
+                datetime.fromisoformat(row["completed_at"])
+                if row["completed_at"] is not None
+                else None
+            ),
+            status=row["status"],
+        )
+
+    @staticmethod
+    def _row_to_session_link(row: sqlite3.Row) -> AgentSessionLink:
+        return AgentSessionLink(
+            session_link_id=row["session_link_id"],
+            attempt_id=row["attempt_id"],
+            agent=row["agent"],
+            external_session_id=row["external_session_id"],
+            content_hash=row["content_hash"],
+            linked_at=datetime.fromisoformat(row["linked_at"]),
+        )
+
+    @staticmethod
+    def _row_to_measurement(row: sqlite3.Row) -> TerMeasurement:
+        return TerMeasurement(
+            measurement_id=row["measurement_id"],
+            attempt_id=row["attempt_id"],
+            session_link_id=row["session_link_id"],
+            analyzer=row["analyzer"],
+            analyzer_version=row["analyzer_version"],
+            measured_at=datetime.fromisoformat(row["measured_at"]),
+            metrics=json.loads(row["metrics"]),
         )
