@@ -13,7 +13,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any, TypeAlias
 
 from tgv.exceptions import RepositoryAccessError
-from tgv.observability import atomic_json
 from tgv.models import (
     CodeSymbol,
     Evidence,
@@ -22,6 +21,7 @@ from tgv.models import (
     RepositoryConfig,
     RepositorySummary,
 )
+from tgv.observability import atomic_json
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]{2,}")
 IndexEntry: TypeAlias = dict[str, Any]
@@ -184,8 +184,8 @@ class Repository:
 
                 for filename in filenames:
                     path = Path(directory) / filename
-                    reason = self._eligibility(path)
-                    if reason is None:
+                    file_reason = self._eligibility(path)
+                    if file_reason is None:
                         yield path
                         continue
                     try:
@@ -193,7 +193,11 @@ class Repository:
                     except OSError:
                         should_count = True
                     if should_count:
-                        setattr(self._omitted, reason, getattr(self._omitted, reason) + 1)
+                        setattr(
+                            self._omitted,
+                            file_reason,
+                            getattr(self._omitted, file_reason) + 1,
+                        )
         except OSError as exc:
             raise RepositoryAccessError(f"Cannot enumerate repository root: {self.root}") from exc
 

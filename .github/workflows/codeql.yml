@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
   security-events: write
+  # Required for private repositories: the CodeQL action reads workflow-run
+  # metadata (get-a-workflow-run) while uploading results.
+  actions: read
 
 jobs:
   analyze:

@@ -554,9 +554,7 @@ def main(argv: list[str] | None = None) -> None:
 
                 if args.action == "outcomes":
                     repository_id = service.outcomes.repository_id(service.repository.root)
-                    records = service.outcomes.query(
-                        repository_id=repository_id, limit=args.limit
-                    )
+                    records = service.outcomes.query(repository_id=repository_id, limit=args.limit)
                     report = run_outcome_benchmark(
                         records,
                         minimum_verified_samples=args.minimum_verified_samples,

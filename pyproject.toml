@@ -32,9 +32,10 @@ ter = ["ter-calculator[embeddings] @ git+https://github.com/cplegendre/TER.git@v
 dev = [
   "build>=1.2,<2",
   "mypy>=1.11,<2",
-  "pytest>=8,<9",
+  "pytest>=9.0.3,<10",
   "pytest-cov>=5,<7",
   "ruff>=0.6,<1",
+  "setuptools>=83",
   "types-PyYAML>=6.0.12",
   "types-tqdm",
   "pip-audit>=2.7,<3",
