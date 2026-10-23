@@ -67,8 +67,9 @@ The command validates that the task belongs to the current repository, rejects m
 directories, endpoint symbolic links, oversized files, and malformed session records, and verifies
 that the session contains a consistent session identifier with at least one user and one assistant
 message. It stores only the agent name, the external session identifier, the SHA-256 content hash,
-the attempt link, and timestamps. The absolute path and raw session contents are never stored.
-Repeating an identical link is idempotent; conflicting links and changed content are rejected.
+the attempt link, an explicit absolute file locator, and timestamps. Raw session contents, prompts,
+responses, classified spans, and transcripts are never stored. Repeating an identical link is
+idempotent; conflicting links, conflicting file locators, and changed content are rejected.
 
 Session files are opened by descriptor with `O_NOFOLLOW` where the platform supports it, and the
 regular-file and size checks run against `fstat()` for the file actually opened. The size limit is
@@ -89,6 +90,46 @@ sessions automatically and never scans developer home directories.
 
 - `claude-code`: JSONL records with `type` set to `user` or `assistant`, a `message` object, and a
   consistent `sessionId`. This is the format parsed by TER 3.0.0.
+
+## Measure linked sessions
+
+After one or more sessions have been linked and outcome validation evidence has been recorded, run:
+
+```bash
+tgv efficiency --linked --repo .
+```
+
+Linked mode loads attempts and session links from the outcome ledger, revalidates each session file,
+compares its external session identity and SHA-256 fingerprint with the stored link, writes the
+exact validated bytes to an owner-only temporary snapshot, and invokes the TER CLI against that
+snapshot. The snapshot is removed after success or failure, so later path replacement or in-place
+changes cannot alter the analyzed content. TGV also verifies the TER executable version through
+the public `ter --version` interface, requires TER 3.0.0, compares the `session_id` returned by
+TER with the linked session, and rejects out-of-range or internally inconsistent aggregate token
+metrics. It persists only aggregate TER metrics in `ter_measurements`. It never scores TGV's
+synthetic telemetry.
+
+All linked sessions are validated and analyzed before measurements are committed in one SQLite
+transaction. A TER failure or measurement conflict therefore rolls back the batch. Re-running an
+identical measurement is idempotent; conflicting analyzer results raise an error rather than
+overwriting stored evidence. The `--linked` and `--sessions` options cannot be combined.
+
+View persisted measurements without invoking TER:
+
+```bash
+tgv report --linked --repo .
+```
+
+The linked report separates raw measurement records from token-weighted aggregates by route,
+selected model, and capability tier. It reports total, linked, measured, verified-success, and
+unverified task counts separately. A task that completed without positive validation evidence is
+not counted as a verified success. Missing, changed, or identity-mismatched session files are
+rejected during measurement.
+
+Measurement history is preserved, but aggregation is deterministic: for each linked session, TGV
+uses only the most recent valid measurement and marks earlier measurements as superseded in the
+raw record list. Ties are broken by measurement identifier. This prevents multiple analyzer
+versions from counting the same session more than once.
 
 Codex exposes a current session identifier through hooks and a transcript path, but official
 OpenAI documentation does not define a stable transcript-file schema. TGV therefore does not
@@ -114,7 +155,8 @@ TGV's built-in telemetry records request text and a **synthetic routing reply**,
 not the downstream coding agent's full session. Running TER on this telemetry
 measures the synthetic messages, **not real coding-agent execution efficiency**.
 Linking a real session records durable metadata only; TER scoring of linked
-sessions is not implemented in this change.
+sessions is available through `tgv efficiency --linked`; the two modes must not
+be compared as equivalent measurements.
 Do not treat synthetic TER scores as execution efficiency, verified correctness,
 or proven token savings. Historical threshold calibration based on synthetic
 telemetry has the same limitation.
@@ -137,7 +179,7 @@ keeps only aggregate values and does not need detailed span content.
 
 ## Scope
 
-This integration documents the pinned TER 3.0.0 CLI contract and fixes optional
-installation requirements. It also documents TGV's explicit metadata-only session linking and
-validation-evidence commands. It does not run TER during linking, implement TER scoring or linked
-efficiency reports, update routing algorithms, or support an unverified TER 4 API.
+This integration documents the pinned TER 3.0.0 CLI contract, optional
+installation requirements, metadata-only session linking, validation evidence,
+and linked TER measurement. It does not run TER during linking, update routing
+algorithms, or support an unverified TER 4 API.

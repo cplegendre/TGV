@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 from collections.abc import Iterable, Mapping
 from contextlib import closing, suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -31,13 +32,28 @@ from tgv.models import (
     TerMeasurement,
 )
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _CONTENT_HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
+@dataclass(frozen=True)
+class TerMeasurementRequest:
+    """A measurement to persist, without generated database identifiers."""
+
+    attempt_id: str
+    analyzer: str
+    analyzer_version: str
+    metrics: Mapping[str, float | int | None]
+    session_link_id: str | None = None
+    measured_at: datetime | None = None
+
+
 def _normalize_session_link(
-    agent: str, external_session_id: str, content_hash: str | None
-) -> tuple[str, str, str | None]:
+    agent: str,
+    external_session_id: str,
+    content_hash: str | None,
+    session_path: str | None,
+) -> tuple[str, str, str | None, str | None]:
     agent_name = agent.strip()
     session_id = external_session_id.strip()
     if not agent_name:
@@ -47,7 +63,10 @@ def _normalize_session_link(
     normalized_hash = None if content_hash is None else content_hash.lower()
     if normalized_hash is not None and not _CONTENT_HASH.fullmatch(normalized_hash):
         raise ValueError("content_hash must be a sha256 hex digest")
-    return agent_name, session_id, normalized_hash
+    normalized_path = (
+        None if session_path is None else str(Path(session_path).expanduser().absolute())
+    )
+    return agent_name, session_id, normalized_hash, normalized_path
 
 
 class OutcomeLedger:
@@ -79,6 +98,7 @@ class OutcomeLedger:
             if row is None:
                 OutcomeLedger._create_v1_schema(connection)
                 OutcomeLedger._create_v2_schema(connection)
+                OutcomeLedger._create_v3_schema(connection)
                 connection.execute(
                     "INSERT INTO schema_version(version) VALUES (?)", (_SCHEMA_VERSION,)
                 )
@@ -88,10 +108,16 @@ class OutcomeLedger:
                 raise RuntimeError(f"Unsupported outcome schema version: {version}")
             if version == 1:
                 OutcomeLedger._migrate_v1_to_v2(connection)
+                OutcomeLedger._migrate_v2_to_v3(connection)
+                connection.execute("UPDATE schema_version SET version = ?", (_SCHEMA_VERSION,))
+                return
+            if version == 2:
+                OutcomeLedger._migrate_v2_to_v3(connection)
                 connection.execute("UPDATE schema_version SET version = ?", (_SCHEMA_VERSION,))
                 return
             OutcomeLedger._create_v1_schema(connection)
             OutcomeLedger._create_v2_schema(connection)
+            OutcomeLedger._create_v3_schema(connection)
 
     @staticmethod
     def _create_v1_schema(connection: sqlite3.Connection) -> None:
@@ -207,6 +233,24 @@ class OutcomeLedger:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS ter_measurements_attempt ON ter_measurements(attempt_id)"
+        )
+
+    @staticmethod
+    def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+        OutcomeLedger._create_v1_schema(connection)
+        OutcomeLedger._create_v2_schema(connection)
+        OutcomeLedger._create_v3_schema(connection)
+
+    @staticmethod
+    def _create_v3_schema(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_locators (
+                session_link_id TEXT PRIMARY KEY
+                    REFERENCES agent_sessions(session_link_id) ON DELETE CASCADE,
+                locator TEXT NOT NULL UNIQUE CHECK (length(trim(locator)) > 0)
+            )
+            """
         )
 
     @staticmethod
@@ -339,7 +383,10 @@ class OutcomeLedger:
         """Return an existing external session link, if this agent/session is known."""
         with closing(self._connect()) as connection, connection:
             row = connection.execute(
-                "SELECT * FROM agent_sessions WHERE agent = ? AND external_session_id = ?",
+                "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                "FROM agent_sessions LEFT JOIN session_locators "
+                "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                "WHERE agent = ? AND external_session_id = ?",
                 (agent.strip(), external_session_id.strip()),
             ).fetchone()
         return None if row is None else self._row_to_session_link(row)
@@ -502,11 +549,12 @@ class OutcomeLedger:
         agent: str,
         external_session_id: str,
         content_hash: str | None = None,
+        session_path: str | None = None,
         linked_at: datetime | None = None,
     ) -> AgentSessionLink:
         """Link an opaque external agent-session reference to an execution attempt."""
-        agent_name, session_id, normalized_hash = _normalize_session_link(
-            agent, external_session_id, content_hash
+        agent_name, session_id, normalized_hash, normalized_path = _normalize_session_link(
+            agent, external_session_id, content_hash, session_path
         )
         with closing(self._connect()) as connection, connection:
             attempt = connection.execute(
@@ -520,6 +568,7 @@ class OutcomeLedger:
                 agent=agent_name,
                 external_session_id=session_id,
                 content_hash=normalized_hash,
+                session_path=normalized_path,
                 linked_at=linked_at,
             )
 
@@ -531,6 +580,7 @@ class OutcomeLedger:
         agent: str,
         external_session_id: str,
         content_hash: str | None,
+        session_path: str | None,
         linked_at: datetime | None,
     ) -> AgentSessionLink:
         link = AgentSessionLink(
@@ -539,6 +589,7 @@ class OutcomeLedger:
             agent=agent,
             external_session_id=external_session_id,
             content_hash=content_hash,
+            session_path=session_path,
             linked_at=linked_at or datetime.now(UTC),
         )
         try:
@@ -554,9 +605,25 @@ class OutcomeLedger:
                     link.linked_at.isoformat(),
                 ),
             )
+            if session_path is not None:
+                locator_owner = connection.execute(
+                    "SELECT session_link_id FROM session_locators WHERE locator = ?",
+                    (session_path,),
+                ).fetchone()
+                if locator_owner is not None:
+                    raise ConflictingSessionLinkError(
+                        "Session file path is already linked to another session"
+                    )
+                connection.execute(
+                    "INSERT INTO session_locators (session_link_id, locator) VALUES (?, ?)",
+                    (link.session_link_id, session_path),
+                )
         except sqlite3.IntegrityError as exc:
             existing = connection.execute(
-                "SELECT * FROM agent_sessions WHERE agent = ? AND external_session_id = ?",
+                "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                "FROM agent_sessions LEFT JOIN session_locators "
+                "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                "WHERE agent = ? AND external_session_id = ?",
                 (agent, external_session_id),
             ).fetchone()
             if existing is None:
@@ -567,6 +634,35 @@ class OutcomeLedger:
                 raise ConflictingSessionLinkError(
                     "External session id is already linked to a different attempt"
                 ) from exc
+            existing_path = existing["session_path"]
+            if existing_path is not None and existing_path != session_path:
+                raise ConflictingSessionLinkError(
+                    "External session is already linked from a different file path"
+                ) from exc
+            if existing_path is None and session_path is not None:
+                locator_owner = connection.execute(
+                    "SELECT session_link_id FROM session_locators WHERE locator = ?",
+                    (session_path,),
+                ).fetchone()
+                if locator_owner is not None:
+                    raise ConflictingSessionLinkError(
+                        "Session file path is already linked to another session"
+                    ) from exc
+                connection.execute(
+                    "INSERT INTO session_locators (session_link_id, locator) VALUES (?, ?)",
+                    (existing["session_link_id"], session_path),
+                )
+                existing = connection.execute(
+                    "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                    "FROM agent_sessions LEFT JOIN session_locators "
+                    "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                    "WHERE agent_sessions.session_link_id = ?",
+                    (existing["session_link_id"],),
+                ).fetchone()
+                if existing is None:
+                    raise ConflictingSessionLinkError(
+                        "External session link disappeared while updating its path"
+                    ) from exc
             return OutcomeLedger._row_to_session_link(existing)
         return link
 
@@ -577,13 +673,14 @@ class OutcomeLedger:
         agent: str,
         external_session_id: str,
         content_hash: str | None = None,
+        session_path: str | None = None,
         expected_repository_id: str | None = None,
         attempt_id: str | None = None,
         started_at: datetime | None = None,
     ) -> tuple[ExecutionAttempt, AgentSessionLink, bool]:
         """Atomically select/create an attempt and link a validated agent session."""
-        agent_name, session_id, normalized_hash = _normalize_session_link(
-            agent, external_session_id, content_hash
+        agent_name, session_id, normalized_hash, normalized_path = _normalize_session_link(
+            agent, external_session_id, content_hash, session_path
         )
         with closing(self._connect()) as connection:
             try:
@@ -600,7 +697,10 @@ class OutcomeLedger:
                     )
 
                 existing = connection.execute(
-                    "SELECT * FROM agent_sessions WHERE agent = ? AND external_session_id = ?",
+                    "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                    "FROM agent_sessions LEFT JOIN session_locators "
+                    "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                    "WHERE agent = ? AND external_session_id = ?",
                     (agent_name, session_id),
                 ).fetchone()
                 if existing is not None:
@@ -620,6 +720,27 @@ class OutcomeLedger:
                         raise ConflictingSessionLinkError(
                             "External session content changed after it was linked"
                         )
+                    existing_path = existing["session_path"]
+                    if existing_path is not None and existing_path != normalized_path:
+                        raise ConflictingSessionLinkError(
+                            "External session is already linked from a different file path"
+                        )
+                    if existing_path is None and normalized_path is not None:
+                        connection.execute(
+                            "INSERT INTO session_locators (session_link_id, locator) VALUES (?, ?)",
+                            (existing["session_link_id"], normalized_path),
+                        )
+                        existing = connection.execute(
+                            "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                            "FROM agent_sessions LEFT JOIN session_locators "
+                            "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                            "WHERE agent_sessions.session_link_id = ?",
+                            (existing["session_link_id"],),
+                        ).fetchone()
+                        if existing is None:
+                            raise ConflictingSessionLinkError(
+                                "External session link disappeared while updating its path"
+                            )
                     attempt = self._row_to_attempt(attempt_row)
                     link = self._row_to_session_link(existing)
                     connection.commit()
@@ -638,6 +759,7 @@ class OutcomeLedger:
                     agent=agent_name,
                     external_session_id=session_id,
                     content_hash=normalized_hash,
+                    session_path=normalized_path,
                     linked_at=None,
                 )
                 connection.commit()
@@ -698,71 +820,122 @@ class OutcomeLedger:
         measured_at: datetime | None = None,
     ) -> TerMeasurement:
         """Persist numeric TER-style measurements without storing TER internals."""
-        analyzer_name = analyzer.strip()
-        version = analyzer_version.strip()
-        if not analyzer_name:
-            raise ValueError("Analyzer name must not be empty")
-        if not version:
-            raise ValueError("Analyzer version must not be empty")
-        normalized_metrics = self._normalize_metrics(metrics or {})
-        metrics_json = json.dumps(normalized_metrics, sort_keys=True)
-        with closing(self._connect()) as connection, connection:
-            attempt = connection.execute(
-                "SELECT attempt_id FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
-            ).fetchone()
-            if attempt is None:
-                raise KeyError(f"Unknown attempt id: {attempt_id}")
-            if session_link_id is not None:
-                link = connection.execute(
-                    "SELECT attempt_id FROM agent_sessions WHERE session_link_id = ?",
-                    (session_link_id,),
-                ).fetchone()
-                if link is None:
-                    raise KeyError(f"Unknown session link id: {session_link_id}")
-                if link["attempt_id"] != attempt_id:
-                    raise CorrelationMismatchError(
-                        "Session link belongs to a different execution attempt"
-                    )
-            measurement = TerMeasurement(
-                measurement_id=str(uuid.uuid4()),
-                attempt_id=attempt_id,
-                session_link_id=session_link_id,
-                analyzer=analyzer_name,
-                analyzer_version=version,
-                measured_at=measured_at or datetime.now(UTC),
-                metrics=normalized_metrics,
-            )
-            try:
-                connection.execute(
-                    "INSERT INTO ter_measurements (measurement_id, attempt_id, session_link_id, "
-                    "analyzer, analyzer_version, measured_at, metrics) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        measurement.measurement_id,
-                        measurement.attempt_id,
-                        measurement.session_link_id,
-                        measurement.analyzer,
-                        measurement.analyzer_version,
-                        measurement.measured_at.isoformat(),
-                        metrics_json,
-                    ),
+        return self.record_ter_measurements(
+            [
+                TerMeasurementRequest(
+                    attempt_id=attempt_id,
+                    analyzer=analyzer,
+                    analyzer_version=analyzer_version,
+                    metrics=metrics or {},
+                    session_link_id=session_link_id,
+                    measured_at=measured_at,
                 )
-            except sqlite3.IntegrityError as exc:
-                existing = connection.execute(
-                    "SELECT * FROM ter_measurements WHERE attempt_id = ? "
-                    "AND analyzer = ? AND analyzer_version = ?",
-                    (attempt_id, analyzer_name, version),
-                ).fetchone()
-                if existing is None:
-                    raise
-                if (
-                    existing["session_link_id"] != session_link_id
-                    or existing["metrics"] != metrics_json
-                ):
-                    raise ConflictingMeasurementError(
-                        "A different measurement already exists for this attempt and analyzer"
-                    ) from exc
-                return self._row_to_measurement(existing)
+            ]
+        )[0]
+
+    def record_ter_measurements(
+        self, requests: Iterable[TerMeasurementRequest]
+    ) -> list[TerMeasurement]:
+        """Persist a batch of measurements atomically."""
+        normalized_requests: list[TerMeasurementRequest] = []
+        for request in requests:
+            analyzer_name = request.analyzer.strip()
+            version = request.analyzer_version.strip()
+            if not analyzer_name:
+                raise ValueError("Analyzer name must not be empty")
+            if not version:
+                raise ValueError("Analyzer version must not be empty")
+            normalized_requests.append(
+                TerMeasurementRequest(
+                    attempt_id=request.attempt_id,
+                    analyzer=analyzer_name,
+                    analyzer_version=version,
+                    metrics=self._normalize_metrics(request.metrics),
+                    session_link_id=request.session_link_id,
+                    measured_at=request.measured_at,
+                )
+            )
+        if not normalized_requests:
+            return []
+
+        with closing(self._connect()) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                measurements = [
+                    self._record_ter_measurement(connection, request)
+                    for request in normalized_requests
+                ]
+                connection.commit()
+            except BaseException:
+                connection.rollback()
+                raise
+        return measurements
+
+    def _record_ter_measurement(
+        self, connection: sqlite3.Connection, request: TerMeasurementRequest
+    ) -> TerMeasurement:
+        attempt_id = request.attempt_id
+        analyzer_name = request.analyzer
+        version = request.analyzer_version
+        session_link_id = request.session_link_id
+        normalized_metrics = dict(request.metrics)
+        metrics_json = json.dumps(normalized_metrics, sort_keys=True)
+        attempt = connection.execute(
+            "SELECT attempt_id FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
+        ).fetchone()
+        if attempt is None:
+            raise KeyError(f"Unknown attempt id: {attempt_id}")
+        if session_link_id is not None:
+            link = connection.execute(
+                "SELECT attempt_id FROM agent_sessions WHERE session_link_id = ?",
+                (session_link_id,),
+            ).fetchone()
+            if link is None:
+                raise KeyError(f"Unknown session link id: {session_link_id}")
+            if link["attempt_id"] != attempt_id:
+                raise CorrelationMismatchError(
+                    "Session link belongs to a different execution attempt"
+                )
+        measurement = TerMeasurement(
+            measurement_id=str(uuid.uuid4()),
+            attempt_id=attempt_id,
+            session_link_id=session_link_id,
+            analyzer=analyzer_name,
+            analyzer_version=version,
+            measured_at=request.measured_at or datetime.now(UTC),
+            metrics=normalized_metrics,
+        )
+        try:
+            connection.execute(
+                "INSERT INTO ter_measurements (measurement_id, attempt_id, session_link_id, "
+                "analyzer, analyzer_version, measured_at, metrics) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    measurement.measurement_id,
+                    measurement.attempt_id,
+                    measurement.session_link_id,
+                    measurement.analyzer,
+                    measurement.analyzer_version,
+                    measurement.measured_at.isoformat(),
+                    metrics_json,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            existing = connection.execute(
+                "SELECT * FROM ter_measurements WHERE attempt_id = ? "
+                "AND analyzer = ? AND analyzer_version = ?",
+                (attempt_id, analyzer_name, version),
+            ).fetchone()
+            if existing is None:
+                raise
+            if (
+                existing["session_link_id"] != session_link_id
+                or existing["metrics"] != metrics_json
+            ):
+                raise ConflictingMeasurementError(
+                    "A different measurement already exists for this attempt and analyzer"
+                ) from exc
+            return self._row_to_measurement(existing)
         return measurement
 
     @staticmethod
@@ -792,11 +965,22 @@ class OutcomeLedger:
             ).fetchall()
         return [self._row_to_attempt(row) for row in rows]
 
+    def all_execution_attempts(self) -> list[ExecutionAttempt]:
+        """Return every execution attempt, ordered by task and attempt number."""
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                "SELECT * FROM execution_attempts ORDER BY task_id, attempt_number"
+            ).fetchall()
+        return [self._row_to_attempt(row) for row in rows]
+
     def agent_sessions(self, attempt_id: str) -> list[AgentSessionLink]:
         """Return external agent-session links recorded for an attempt."""
         with closing(self._connect()) as connection, connection:
             rows = connection.execute(
-                "SELECT * FROM agent_sessions WHERE attempt_id = ? "
+                "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                "FROM agent_sessions LEFT JOIN session_locators "
+                "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                "WHERE agent_sessions.attempt_id = ? "
                 "ORDER BY linked_at, session_link_id",
                 (attempt_id,),
             ).fetchall()
@@ -950,6 +1134,7 @@ class OutcomeLedger:
             agent=row["agent"],
             external_session_id=row["external_session_id"],
             content_hash=row["content_hash"],
+            session_path=row["session_path"],
             linked_at=datetime.fromisoformat(row["linked_at"]),
         )
 

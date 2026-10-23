@@ -242,8 +242,18 @@ def test_optional_ter_analyzer_success(monkeypatch: pytest.MonkeyPatch, tmp_path
     from tgv.efficiency import TERAnalysis, _ter_analyzer
 
     monkeypatch.setattr(
+        "tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0"
+    )
+    monkeypatch.setattr(
         "tgv.efficiency._run_ter_analysis",
-        lambda executable, path, timeout: TERAnalysis(1, 1, 0),
+        lambda executable, path, timeout, analyzer_version: TERAnalysis(
+            session_id="session-1",
+            aggregate_ter=1,
+            aligned_tokens=1,
+            waste_tokens=0,
+            analyzer="TER CLI",
+            analyzer_version=analyzer_version,
+        ),
     )
     result = _ter_analyzer(executable="fake-ter")(tmp_path / "x.jsonl")
     assert result.aligned_tokens == 1

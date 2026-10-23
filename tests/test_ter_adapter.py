@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from tgv.efficiency import (
     TERUnavailableError,
     _ter_analyzer,
     score_sessions,
+    validate_ter_analysis,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -21,9 +23,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _fake_ter(tmp_path: Path, body: str) -> Path:
+def _fake_ter(tmp_path: Path, body: str, *, version: str = "3.0.0") -> Path:
     script = tmp_path / "fake-ter"
-    script.write_text(f"#!{sys.executable}\n{body}\n", encoding="utf-8")
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "if sys.argv[1:2] == ['--version']:\n"
+        f"    print('ter {version}')\n"
+        "    raise SystemExit(0)\n"
+        f"{body}\n",
+        encoding="utf-8",
+    )
     script.chmod(0o755)
     return script
 
@@ -52,7 +62,14 @@ def _session(tmp_path: Path) -> Path:
 def test_valid_ter_json_output(tmp_path: Path) -> None:
     script = _fake_ter(tmp_path, _emit(_payload()))
     result = _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
-    assert result == TERAnalysis(aggregate_ter=0.875, aligned_tokens=875, waste_tokens=125)
+    assert result == TERAnalysis(
+        session_id="session-1",
+        aggregate_ter=0.875,
+        aligned_tokens=875,
+        waste_tokens=125,
+        analyzer="TER CLI",
+        analyzer_version="3.0.0",
+    )
 
 
 def test_additional_json_fields_are_ignored(tmp_path: Path) -> None:
@@ -63,9 +80,145 @@ def test_additional_json_fields_are_ignored(tmp_path: Path) -> None:
     )
     script = _fake_ter(tmp_path, _emit(payload))
     result = _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
-    assert result == TERAnalysis(aggregate_ter=0.875, aligned_tokens=875, waste_tokens=125)
+    assert result == TERAnalysis(
+        session_id="session-1",
+        aggregate_ter=0.875,
+        aligned_tokens=875,
+        waste_tokens=125,
+        analyzer="TER CLI",
+        analyzer_version="3.0.0",
+    )
     assert not hasattr(result, "classified_spans")
     assert "SECRET SPAN TEXT" not in repr(result)
+
+
+def test_missing_session_id_json_field(tmp_path: Path) -> None:
+    payload = _payload()
+    payload.pop("session_id")
+    script = _fake_ter(tmp_path, _emit(payload))
+
+    with pytest.raises(TERAnalysisError, match="session_id"):
+        _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
+
+
+def test_inconsistent_total_tokens_are_rejected(tmp_path: Path) -> None:
+    payload = _payload(total_tokens=999)
+    script = _fake_ter(tmp_path, _emit(payload))
+
+    with pytest.raises(TERAnalysisError, match=r"total_tokens.*aligned_tokens"):
+        _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
+
+
+@pytest.mark.parametrize("aggregate_ter", [-0.1, 1.1])
+def test_out_of_range_aggregate_ter_is_rejected(
+    tmp_path: Path, aggregate_ter: float
+) -> None:
+    payload = _payload(aggregate_ter=aggregate_ter)
+    script = _fake_ter(tmp_path, _emit(payload))
+
+    with pytest.raises(TERAnalysisError, match="between 0 and 1"):
+        _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
+
+
+def test_unsupported_ter_version_is_rejected(tmp_path: Path) -> None:
+    script = _fake_ter(tmp_path, _emit(_payload()), version="3.1.0")
+
+    with pytest.raises(TERAnalysisError, match=r"Unsupported TER CLI version"):
+        _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
+
+
+def test_unrecognized_ter_version_output_is_rejected(tmp_path: Path) -> None:
+    script = _fake_ter(tmp_path, _emit(_payload()), version="unknown")
+
+    with pytest.raises(TERAnalysisError, match="version output was unrecognized"):
+        _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
+
+
+def test_ter_version_command_failure_is_actionable(tmp_path: Path) -> None:
+    script = tmp_path / "fake-ter"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "sys.stderr.write('bad version')\n"
+        "sys.exit(8)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+
+    with pytest.raises(TERAnalysisError, match="version check failed with exit code 8"):
+        _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"session_id": ""},
+        {"session_id": "x" * 201},
+        {"aligned_tokens": -1},
+        {"waste_tokens": 1.5},
+    ],
+)
+def test_direct_analysis_validation_rejects_invalid_fields(update: object) -> None:
+    analysis = TERAnalysis(
+        session_id="session-1",
+        aggregate_ter=0.875,
+        aligned_tokens=875,
+        waste_tokens=125,
+        analyzer="TER CLI",
+        analyzer_version="3.0.0",
+    )
+
+    with pytest.raises(TERAnalysisError):
+        validate_ter_analysis(replace(analysis, **update))
+
+
+def test_ter_version_is_detected_once_for_multiple_analyses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = _fake_ter(tmp_path, _emit(_payload()))
+    version_checks: list[str] = []
+
+    def detect_version(executable: str, timeout: float) -> str:
+        version_checks.append(executable)
+        return "3.0.0"
+
+    monkeypatch.setattr("tgv.efficiency._detect_ter_version", detect_version)
+    analyzer = _ter_analyzer(executable=str(script), timeout=5)
+
+    analyzer(_session(tmp_path))
+    analyzer(_session(tmp_path))
+
+    assert len(version_checks) == 1
+
+
+def test_analysis_executable_disappearance_after_version_check_is_wrapped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0"
+    )
+    analyzer = _ter_analyzer(executable=str(tmp_path / "missing-ter"), timeout=5)
+
+    with pytest.raises(TERUnavailableError, match="tgv-agent\\[ter\\]"):
+        analyzer(_session(tmp_path))
+
+
+def test_analysis_start_failure_after_version_check_is_wrapped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0"
+    )
+
+    def fail_run(*args: object, **kwargs: object) -> object:
+        raise OSError("denied")
+
+    monkeypatch.setattr("tgv.efficiency.subprocess.run", fail_run)
+    with pytest.raises(TERAnalysisError, match="could not start"):
+        _ter_analyzer(executable="ter", timeout=5)(_session(tmp_path))
 
 
 @pytest.mark.parametrize("missing", ["aggregate_ter", "aligned_tokens", "waste_tokens"])
