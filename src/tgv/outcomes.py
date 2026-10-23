@@ -21,12 +21,14 @@ from tgv.exceptions import (
     ConflictingSessionLinkError,
     CorrelationMismatchError,
     CrossRepositoryError,
+    LedgerReadError,
 )
 from tgv.models import (
     AgentSessionLink,
     CapabilityTier,
     ExecutionAttempt,
     OutcomeTask,
+    Route,
     TaskCategory,
     TaskProfile,
     TerMeasurement,
@@ -72,11 +74,16 @@ def _normalize_session_link(
 class OutcomeLedger:
     """Privacy-minimal SQLite outcome store with transactional schema initialization."""
 
-    def __init__(self, path: Path, *, retain_raw_prompts: bool = False) -> None:
+    def __init__(
+        self, path: Path, *, retain_raw_prompts: bool = False, read_only: bool = False
+    ) -> None:
         self.path = path
         self.retain_raw_prompts = retain_raw_prompts
+        self.read_only = read_only
 
     def _connect(self) -> sqlite3.Connection:
+        if self.read_only:
+            return self._connect_read_only()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=5.0)
         with suppress(OSError):
@@ -87,6 +94,57 @@ class OutcomeLedger:
         connection.execute("PRAGMA foreign_keys = ON")
         self._initialize(connection)
         return connection
+
+    def _connect_read_only(self) -> sqlite3.Connection:
+        if not self.path.is_file():
+            raise LedgerReadError(f"Outcome ledger does not exist: {self.path}")
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = sqlite3.connect(
+                f"{self.path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0
+            )
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout = 5000")
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("PRAGMA query_only = ON")
+            self._validate_read_only_schema(connection)
+        except (sqlite3.Error, LedgerReadError) as exc:
+            if connection is not None:
+                connection.close()
+            raise LedgerReadError(f"Outcome ledger cannot be opened read-only: {exc}") from exc
+        return connection
+
+    @staticmethod
+    def _validate_read_only_schema(connection: sqlite3.Connection) -> None:
+        tables = {
+            str(row[0])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        required_tables = {
+            "schema_version",
+            "outcomes",
+            "execution_attempts",
+            "agent_sessions",
+            "ter_measurements",
+            "session_locators",
+        }
+        missing_tables = sorted(required_tables - tables)
+        if missing_tables:
+            raise LedgerReadError(
+                "Outcome ledger is missing required tables: " + ", ".join(missing_tables)
+            )
+        rows = connection.execute("SELECT version FROM schema_version").fetchall()
+        if len(rows) != 1:
+            raise LedgerReadError("Outcome ledger has an invalid schema version record")
+        try:
+            version = int(rows[0][0])
+        except (TypeError, ValueError) as exc:
+            raise LedgerReadError("Outcome ledger has an invalid schema version value") from exc
+        if version != _SCHEMA_VERSION:
+            raise LedgerReadError(
+                f"Outcome ledger schema version {version} is not supported in read-only mode; "
+                "upgrade the ledger with a writable TGV command"
+            )
 
     @staticmethod
     def _initialize(connection: sqlite3.Connection) -> None:
@@ -301,19 +359,34 @@ class OutcomeLedger:
         files: list[str],
         symbols: list[str],
         context_token_estimate: int,
+        route: Route | None = None,
     ) -> None:
+        metadata: dict[str, Any] | None = None
+        if route is not None:
+            with closing(self._connect()) as connection, connection:
+                row = connection.execute(
+                    "SELECT metadata FROM outcomes WHERE task_id = ?", (task_id,)
+                ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown task id: {task_id}")
+            stored_metadata = json.loads(row["metadata"])
+            if not isinstance(stored_metadata, dict):
+                raise ValueError(f"Outcome task {task_id} has invalid metadata")
+            metadata = {**stored_metadata, "authoritative_route": route.value}
         self.assign_routing_decision_id(task_id)
-        self._update(
-            task_id,
-            revised_complexity_score=revised_profile.complexity_score,
-            routing_confidence=confidence,
-            selected_model=model,
-            selected_capability_tier=capability_tier.value,
-            routing_reasons=json.dumps(reasons),
-            retrieved_files=json.dumps(files),
-            retrieved_symbols=json.dumps(symbols),
-            context_token_estimate=context_token_estimate,
-        )
+        values: dict[str, Any] = {
+            "revised_complexity_score": revised_profile.complexity_score,
+            "routing_confidence": confidence,
+            "selected_model": model,
+            "selected_capability_tier": capability_tier.value,
+            "routing_reasons": json.dumps(reasons),
+            "retrieved_files": json.dumps(files),
+            "retrieved_symbols": json.dumps(symbols),
+            "context_token_estimate": context_token_estimate,
+        }
+        if metadata is not None:
+            values["metadata"] = json.dumps(metadata, sort_keys=True)
+        self._update(task_id, **values)
 
     def record_execution(
         self,

@@ -255,6 +255,7 @@ class TGVService:
             files=[e.path for e in bundle.evidence],
             symbols=[],
             context_token_estimate=sum(len(e.excerpt) for e in bundle.evidence) // 4,
+            route=bundle.decision.route,
         )
         bundle.assumptions.append(f"outcome_task_id={task_id}")
         return bundle

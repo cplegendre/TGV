@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from tgv import __version__
+from tgv.bench.observed import observed_benchmark, render_observed_benchmark
 from tgv.config import load_config
 from tgv.efficiency import (
     aggregate_by_route,
@@ -210,7 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark = sub.add_parser(
         "benchmark", help="Run integrated profiling/retrieval/routing evaluation"
     )
-    benchmark.add_argument("action", choices=("run", "outcomes"))
+    benchmark.add_argument("action", choices=("run", "outcomes", "observed"))
     benchmark.add_argument("--cases", type=_path)
     benchmark.add_argument("--repo", type=_path, default=Path.cwd())
     benchmark.add_argument("--config", type=_path)
@@ -220,10 +221,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Exit non-zero when the selected benchmark quality gate fails",
     )
-    benchmark.add_argument("--limit", type=int, default=10000)
-    benchmark.add_argument("--minimum-verified-samples", type=int, default=20)
-    benchmark.add_argument("--minimum-success-rate", type=float, default=0.85)
-    benchmark.add_argument("--maximum-safety-violation-rate", type=float, default=0.0)
+    benchmark.add_argument("--limit", type=int)
+    benchmark.add_argument("--minimum-verified-samples", type=int)
+    benchmark.add_argument("--minimum-success-rate", type=float)
+    benchmark.add_argument("--maximum-safety-violation-rate", type=float)
 
     report = sub.add_parser("report", help="Report local routing and token-allocation evidence")
     report.add_argument("--sessions", type=_path, default=Path(".tgv/sessions"))
@@ -264,7 +265,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _outcome_ledger(repo: Path, config_path: Path | None) -> OutcomeLedger:
+def _outcome_ledger(
+    repo: Path, config_path: Path | None, *, read_only: bool = False
+) -> OutcomeLedger:
     config = load_config(config_path)
     outcome_path = config.intelligence.outcome_database_path
     if not outcome_path.is_absolute():
@@ -272,6 +275,7 @@ def _outcome_ledger(repo: Path, config_path: Path | None) -> OutcomeLedger:
     return OutcomeLedger(
         outcome_path,
         retain_raw_prompts=config.intelligence.retain_raw_prompts,
+        read_only=read_only,
     )
 
 
@@ -545,6 +549,35 @@ def main(argv: list[str] | None = None) -> None:
                         f"{metrics['aligned_tokens']:>7}  {metrics['waste_tokens']:>5}"
                     )
             return
+        if args.command == "benchmark" and args.action == "observed":
+            unsupported_options = [
+                option
+                for option, value in (
+                    ("--enforce", args.enforce),
+                    ("--cases", args.cases is not None),
+                    ("--limit", args.limit is not None),
+                    ("--minimum-verified-samples", args.minimum_verified_samples is not None),
+                    ("--minimum-success-rate", args.minimum_success_rate is not None),
+                    (
+                        "--maximum-safety-violation-rate",
+                        args.maximum_safety_violation_rate is not None,
+                    ),
+                )
+                if value
+            ]
+            if unsupported_options:
+                raise TGVError(
+                    "benchmark observed does not support " + ", ".join(unsupported_options)
+                )
+            report = observed_benchmark(
+                _outcome_ledger(args.repo, args.config, read_only=True), args.repo
+            )
+            print(
+                json.dumps(report, indent=2, sort_keys=True)
+                if args.json
+                else render_observed_benchmark(report)
+            )
+            return
         with closing(TGVService.create(args.repo, args.config)) as service:
             if args.command == "inspect":
                 print(service.repository.summary().model_dump_json(indent=2))
@@ -725,12 +758,27 @@ def main(argv: list[str] | None = None) -> None:
 
                 if args.action == "outcomes":
                     repository_id = service.outcomes.repository_id(service.repository.root)
-                    records = service.outcomes.query(repository_id=repository_id, limit=args.limit)
+                    records = service.outcomes.query(
+                        repository_id=repository_id,
+                        limit=args.limit if args.limit is not None else 10000,
+                    )
                     report = run_outcome_benchmark(
                         records,
-                        minimum_verified_samples=args.minimum_verified_samples,
-                        minimum_verified_success_rate=args.minimum_success_rate,
-                        maximum_safety_violation_rate=args.maximum_safety_violation_rate,
+                        minimum_verified_samples=(
+                            args.minimum_verified_samples
+                            if args.minimum_verified_samples is not None
+                            else 20
+                        ),
+                        minimum_verified_success_rate=(
+                            args.minimum_success_rate
+                            if args.minimum_success_rate is not None
+                            else 0.85
+                        ),
+                        maximum_safety_violation_rate=(
+                            args.maximum_safety_violation_rate
+                            if args.maximum_safety_violation_rate is not None
+                            else 0.0
+                        ),
                     )
                     report["repository_id"] = repository_id
                 else:
