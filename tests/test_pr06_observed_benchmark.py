@@ -957,3 +957,21 @@ def test_invalid_schema_version_is_an_actionable_read_only_error(
     assert database_path.read_bytes() == before
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == "bogus"
+
+
+def test_invalid_latest_measurement_does_not_displace_valid_historical_scope(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    task_id = _task(repo)
+    result = _link(repo, task_id, _session(tmp_path / "session.jsonl"))
+    valid = _measurement(repo, result, measured_at=datetime(2026, 1, 1, tzinfo=UTC))
+    _measurement(
+        repo, result, ter=1.1, analyzer_version="3.0.1",
+        measured_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    report = observed_benchmark(_ledger(repo), repo)
+    assert report["coverage"]["invalid_measurement_count"] == 1
+    assert report["coverage"]["selected_analyzer_version"] == "3.0.0"
+    assert report["coverage"]["measured_session_count"] == 1
+    assert report["observations"][0]["measurement_id"] == valid.measurement_id

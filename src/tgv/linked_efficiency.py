@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tgv.efficiency import TERAnalysis, ter_analyzer, validate_ter_analysis
+from tgv.efficiency import TERAnalysis, TERAnalysisError, ter_analyzer, validate_ter_analysis
 from tgv.evaluation import _outcome_success
 from tgv.exceptions import TGVError, ValidationFailure
 from tgv.models import (
@@ -247,6 +247,22 @@ def _measurement_view(
     waste_tokens = _required_count(measurement.metrics, "waste_tokens")
     total_tokens = _required_count(measurement.metrics, "total_tokens")
     if aggregate_ter is None or aligned_tokens is None or waste_tokens is None:
+        return None
+    if "total_tokens" in measurement.metrics and total_tokens is None:
+        return None
+    try:
+        validate_ter_analysis(
+            TERAnalysis(
+                session_id=link.external_session_id,
+                aggregate_ter=aggregate_ter,
+                aligned_tokens=aligned_tokens,
+                waste_tokens=waste_tokens,
+                total_tokens=total_tokens,
+                analyzer=measurement.analyzer,
+                analyzer_version=measurement.analyzer_version,
+            )
+        )
+    except TERAnalysisError:
         return None
     resolved_total = total_tokens if total_tokens is not None else aligned_tokens + waste_tokens
     return _MeasurementView(
