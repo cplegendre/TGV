@@ -55,6 +55,21 @@ tgv outcomes complete TASK_ID --accepted --repo .
 tgv outcomes complete TASK_ID --rejected --repo .
 ```
 
+Explicitly link a real Claude Code session and record verification evidence:
+
+```bash
+tgv outcomes link TASK_ID \
+  --session ~/.claude/projects/<project>/<session>.jsonl \
+  --agent claude-code \
+  --repo .
+tgv outcomes validate TASK_ID --tests-passed --static-checks-passed --repo .
+```
+
+Linking stores only the session identifier and SHA-256 content hash, never the path or raw
+contents. Validation flags record user-attested results; TGV does not execute the tests or static
+checks. Completion alone is not verified success; tests, static checks, or human feedback must
+also be recorded.
+
 Outcome-based scoreboard recommendations are **experimental**. Until the configured minimum sample count is met, TGV returns `fallback_used: true` with a reason and preserves the deterministic route.
 
 ## Enable telemetry

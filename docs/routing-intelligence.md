@@ -47,9 +47,17 @@ tgv scoreboard "Fix refresh-token rotation" --repo . --json
 tgv explain "Fix refresh-token rotation" --repo .
 tgv outcomes list --repo .
 tgv outcomes export --repo . --format csv
+tgv outcomes link TASK_ID --session ~/.claude/projects/<project>/<session>.jsonl --agent claude-code --repo .
+tgv outcomes validate TASK_ID --tests-passed --static-checks-passed --repo .
 tgv benchmark run --enforce --json
 tgv benchmark outcomes --repo . --json
 ```
+
+`outcomes link` associates a validated external agent session with an execution attempt using a
+SHA-256 content hash and the session identifier. It never stores the session path or contents, and
+identical links are idempotent. `outcomes validate` records user-attested positive or negative test
+and static-analysis results without executing them and without changing the existing
+verified-success semantics.
 
 ## Benchmark scope
 
