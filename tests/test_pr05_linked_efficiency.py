@@ -20,7 +20,7 @@ from tgv.linked_efficiency import (
     linked_measurement_report,
     measure_linked_sessions,
 )
-from tgv.models import CapabilityTier, ExecutionAttempt
+from tgv.models import CapabilityTier, ExecutionAttempt, Route
 from tgv.outcomes import OutcomeLedger
 from tgv.session_linking import link_session_to_task
 
@@ -61,6 +61,7 @@ def _task(
     request: str = "fix helper bug",
     tier: CapabilityTier = CapabilityTier.STANDARD,
     model: str = "local-code",
+    route: Route = Route.LOCAL_CODE,
 ) -> str:
     ledger = _ledger(repo)
     profile = TaskProfiler(default_config().intelligence).profile(request)
@@ -75,6 +76,7 @@ def _task(
         files=[],
         symbols=[],
         context_token_estimate=10,
+        route=route,
     )
     return task_id
 
@@ -159,10 +161,15 @@ def test_repeated_linked_measurement_is_idempotent(tmp_path: Path) -> None:
     assert len(_ledger(repo).ter_measurements(result.attempt.attempt_id)) == 1
 
 
-def test_advanced_tier_uses_local_code_route(tmp_path: Path) -> None:
+def test_scoreboard_advanced_tier_uses_persisted_local_code_route(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    task_id = _task(repo, tier=CapabilityTier.ADVANCED, model="advanced-model")
+    task_id = _task(
+        repo,
+        tier=CapabilityTier.ADVANCED,
+        model="advanced-model",
+        route=Route.LOCAL_CODE,
+    )
     session = _session(tmp_path / "session.jsonl")
     _link(repo, task_id, session)
 
@@ -172,6 +179,28 @@ def test_advanced_tier_uses_local_code_route(tmp_path: Path) -> None:
     assert report["measurements"][0]["selected_capability_tier"] == "advanced"
     assert report["measurements"][0]["route"] == "local_code"
     assert report["aggregates"]["by_route"]["local_code"]["measurement_count"] == 1
+
+
+def test_deterministic_advanced_tier_uses_persisted_frontier_standard_route(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    task_id = _task(
+        repo,
+        tier=CapabilityTier.ADVANCED,
+        model="frontier-standard-model",
+        route=Route.FRONTIER_STANDARD,
+    )
+    session = _session(tmp_path / "session.jsonl")
+    _link(repo, task_id, session)
+
+    _measure(repo)
+    report = linked_measurement_report(_ledger(repo), repo)
+
+    assert report["measurements"][0]["selected_capability_tier"] == "advanced"
+    assert report["measurements"][0]["route"] == "frontier_standard"
+    assert report["aggregates"]["by_route"]["frontier_standard"]["measurement_count"] == 1
 
 
 def test_analysis_snapshot_isolates_validated_bytes_and_is_cleaned_up(
@@ -340,6 +369,7 @@ def test_report_groups_route_model_tier_and_excludes_unverified_success(
         request="refactor architecture",
         tier=CapabilityTier.FRONTIER,
         model="frontier-model",
+        route=Route.FRONTIER_DEEP,
     )
     first_session = _session(tmp_path / "first.jsonl")
     second_session = _session(
@@ -675,9 +705,9 @@ def test_unassigned_routing_metadata_is_reported_explicitly(tmp_path: Path) -> N
         )
 
     report = linked_measurement_report(ledger, repo)
-    assert report["measurements"][0]["route"] == "unassigned"
+    assert report["measurements"][0]["route"] == "unavailable"
     assert report["measurements"][0]["selected_model"] == "unassigned"
-    assert report["aggregates"]["by_route"]["unassigned"]["measurement_count"] == 1
+    assert report["aggregates"]["by_route"]["unavailable"]["measurement_count"] == 1
 
 
 def test_verified_failure_and_cross_task_measurement_are_rejected_or_labeled(

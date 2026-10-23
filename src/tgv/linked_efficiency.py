@@ -14,7 +14,6 @@ from tgv.evaluation import _outcome_success
 from tgv.exceptions import TGVError, ValidationFailure
 from tgv.models import (
     AgentSessionLink,
-    CapabilityTier,
     ExecutionAttempt,
     OutcomeTask,
     Route,
@@ -204,16 +203,13 @@ def _canonical_entries(entries: list[_MeasurementView]) -> list[_MeasurementView
 
 
 def _route_for_task(task: OutcomeTask) -> str:
-    tier = task.selected_capability_tier
-    if tier is None:
-        return "unassigned"
-    route_by_tier = {
-        CapabilityTier.BASIC: Route.LOCAL_FAST,
-        CapabilityTier.STANDARD: Route.LOCAL_CODE,
-        CapabilityTier.ADVANCED: Route.LOCAL_CODE,
-        CapabilityTier.FRONTIER: Route.FRONTIER_DEEP,
-    }
-    return route_by_tier[tier].value
+    route = task.metadata.get("authoritative_route")
+    if isinstance(route, str):
+        try:
+            return Route(route).value
+        except ValueError:
+            return "invalid-route"
+    return "unavailable"
 
 
 def _outcome_status(task: OutcomeTask) -> str:

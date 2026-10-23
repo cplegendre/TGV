@@ -44,3 +44,7 @@ class ConflictingSessionLinkError(OutcomeCorrelationError):
 
 class ConflictingMeasurementError(OutcomeCorrelationError):
     """Raised when a measurement already exists with different content."""
+
+
+class LedgerReadError(TGVError):
+    """Raised when a ledger cannot be opened safely in read-only mode."""
