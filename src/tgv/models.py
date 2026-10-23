@@ -318,13 +318,14 @@ class ExecutionAttempt(BaseModel):
 
 
 class AgentSessionLink(BaseModel):
-    """Opaque reference to an external agent session, never its contents."""
+    """Reference to an external agent session, never its contents."""
 
     session_link_id: str
     attempt_id: str
     agent: str
     external_session_id: str
     content_hash: str | None = None
+    session_path: str | None = None
     linked_at: datetime
 
 

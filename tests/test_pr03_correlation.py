@@ -119,16 +119,17 @@ def _task(ledger: OutcomeLedger, root: Path, request: str = "fix helper bug") ->
     return task_id
 
 
-def test_new_database_creates_schema_v2(tmp_path: Path) -> None:
+def test_new_database_creates_schema_v3(tmp_path: Path) -> None:
     path = tmp_path / "outcomes.sqlite3"
     ledger = OutcomeLedger(path)
     assert ledger.query() == []
-    assert _schema_version(path) == 2
+    assert _schema_version(path) == 3
     assert {
         "outcomes",
         "execution_attempts",
         "agent_sessions",
         "ter_measurements",
+        "session_locators",
     } <= _table_names(path)
 
 
@@ -141,7 +142,7 @@ def test_migration_from_v1_preserves_records(tmp_path: Path) -> None:
     records = ledger.query()
 
     assert {record.task_id for record in records} == {"legacy-routed", "legacy-pending"}
-    assert _schema_version(path) == 2
+    assert _schema_version(path) == 3
     assert ledger.routing_decision_id_for("legacy-routed") is not None
     assert ledger.routing_decision_id_for("legacy-pending") is None
     assert "routing_decision_id" not in ledger.export_json(records)
@@ -157,7 +158,7 @@ def test_repeated_initialization_is_idempotent(tmp_path: Path) -> None:
     assert second.query()[0].task_id == task_id
     third = OutcomeLedger(path)
     assert len(third.execution_attempts(task_id)) == 0
-    assert _schema_version(path) == 2
+    assert _schema_version(path) == 3
 
 
 def test_migration_failure_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

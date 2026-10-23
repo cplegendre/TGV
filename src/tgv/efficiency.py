@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import shutil
 import subprocess
 from collections import defaultdict
@@ -22,6 +23,7 @@ class TERAnalysisError(TGVError):
 
 
 DEFAULT_TER_TIMEOUT_SECONDS = 300.0
+SUPPORTED_TER_VERSION = "3.0.0"
 _MAX_ERROR_EXCERPT = 500
 
 
@@ -31,15 +33,44 @@ class ScoredSession:
     aggregate_ter: float
     aligned_tokens: int
     waste_tokens: int
+    total_tokens: int | None = None
 
 
 @dataclass(frozen=True)
 class TERAnalysis:
     """The subset of TER's documented JSON output that TGV consumes."""
 
+    session_id: str
     aggregate_ter: float
     aligned_tokens: int
     waste_tokens: int
+    analyzer: str
+    analyzer_version: str
+    total_tokens: int | None = None
+
+
+def validate_ter_analysis(analysis: TERAnalysis) -> None:
+    if not isinstance(analysis.session_id, str) or not analysis.session_id.strip():
+        raise TERAnalysisError("TER JSON field 'session_id' must be a non-empty string")
+    if len(analysis.session_id) > 200:
+        raise TERAnalysisError("TER JSON field 'session_id' is too long")
+    if (
+        isinstance(analysis.aggregate_ter, bool)
+        or not isinstance(analysis.aggregate_ter, (int, float))
+        or not math.isfinite(float(analysis.aggregate_ter))
+        or not 0 <= analysis.aggregate_ter <= 1
+    ):
+        raise TERAnalysisError("TER JSON field 'aggregate_ter' must be between 0 and 1")
+    for field in ("aligned_tokens", "waste_tokens"):
+        value = getattr(analysis, field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise TERAnalysisError(f"TER JSON field {field!r} must be a non-negative integer")
+    if analysis.total_tokens is not None and analysis.total_tokens != (
+        analysis.aligned_tokens + analysis.waste_tokens
+    ):
+        raise TERAnalysisError(
+            "TER JSON field 'total_tokens' must equal aligned_tokens plus waste_tokens"
+        )
 
 
 def _resolve_ter_executable() -> str:
@@ -77,21 +108,79 @@ def _required_nonnegative_int(payload: dict[str, Any], field: str) -> int:
     return value
 
 
-def _parse_ter_payload(stdout: str, path: Path) -> TERAnalysis:
+def _required_session_id(payload: dict[str, Any]) -> str:
+    value = payload.get("session_id")
+    if not isinstance(value, str) or not value.strip():
+        raise TERAnalysisError("TER JSON field 'session_id' must be a non-empty string")
+    return value
+
+
+def _parse_ter_payload(stdout: str, path: Path, analyzer_version: str) -> TERAnalysis:
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         raise TERAnalysisError(f"TER returned invalid JSON for {path}: {exc.msg}") from exc
     if not isinstance(payload, dict):
         raise TERAnalysisError(f"TER returned a non-object JSON payload for {path}")
-    return TERAnalysis(
+    total_tokens = payload.get("total_tokens")
+    if total_tokens is not None:
+        total_tokens = _required_nonnegative_int(payload, "total_tokens")
+    analysis = TERAnalysis(
+        session_id=_required_session_id(payload),
         aggregate_ter=_required_finite_number(payload, "aggregate_ter"),
         aligned_tokens=_required_nonnegative_int(payload, "aligned_tokens"),
         waste_tokens=_required_nonnegative_int(payload, "waste_tokens"),
+        analyzer="TER CLI",
+        total_tokens=total_tokens,
+        analyzer_version=analyzer_version,
     )
+    validate_ter_analysis(analysis)
+    return analysis
 
 
-def _run_ter_analysis(executable: str, path: Path, timeout: float) -> TERAnalysis:
+def _detect_ter_version(executable: str, timeout: float) -> str:
+    try:
+        completed = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise TERUnavailableError(
+            "TER CLI executable was not found. Install it with: pip install 'tgv-agent[ter]'"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise TERAnalysisError(
+            f"TER version check timed out after {timeout:g} seconds"
+        ) from exc
+    except OSError as exc:
+        raise TERAnalysisError(f"TER version check could not start: {exc}") from exc
+    if completed.returncode != 0:
+        detail = _bounded_excerpt(completed.stderr or completed.stdout)
+        raise TERAnalysisError(
+            f"TER version check failed with exit code {completed.returncode}: {detail}"
+        )
+    output = (completed.stdout or completed.stderr).strip()
+    match = re.search(r"(?:^|\s)(\d+\.\d+\.\d+)(?:\s|$)", output)
+    if match is None:
+        raise TERAnalysisError(
+            f"TER version output was unrecognized: {_bounded_excerpt(output)}"
+        )
+    version = match.group(1)
+    if version != SUPPORTED_TER_VERSION:
+        raise TERAnalysisError(
+            f"Unsupported TER CLI version {version}; TGV requires TER {SUPPORTED_TER_VERSION}"
+        )
+    return version
+
+
+def _run_ter_analysis(
+    executable: str, path: Path, timeout: float, analyzer_version: str
+) -> TERAnalysis:
     command = [executable, "analyze", str(path.resolve()), "--format", "json"]
     try:
         completed = subprocess.run(
@@ -118,18 +207,25 @@ def _run_ter_analysis(executable: str, path: Path, timeout: float) -> TERAnalysi
         raise TERAnalysisError(
             f"TER analysis failed for {path} with exit code {completed.returncode}: {detail}"
         )
-    return _parse_ter_payload(completed.stdout, path)
+    return _parse_ter_payload(completed.stdout, path, analyzer_version)
 
 
-def _ter_analyzer(
+def ter_analyzer(
     *, executable: str | None = None, timeout: float = DEFAULT_TER_TIMEOUT_SECONDS
 ) -> Callable[[Path], TERAnalysis]:
     resolved = executable or _resolve_ter_executable()
+    analyzer_version: str | None = None
 
     def analyze(path: Path) -> TERAnalysis:
-        return _run_ter_analysis(resolved, path, timeout)
+        nonlocal analyzer_version
+        if analyzer_version is None:
+            analyzer_version = _detect_ter_version(resolved, timeout)
+        return _run_ter_analysis(resolved, path, timeout, analyzer_version)
 
     return analyze
+
+
+_ter_analyzer = ter_analyzer
 
 
 def _route_from_log(path: Path) -> str:
@@ -153,6 +249,9 @@ def score_sessions(
             aggregate_ter=float(result.aggregate_ter),
             aligned_tokens=int(result.aligned_tokens),
             waste_tokens=int(result.waste_tokens),
+            total_tokens=(
+                int(total) if (total := getattr(result, "total_tokens", None)) is not None else None
+            ),
         )
         for path in sorted(log_directory.glob("*.jsonl"))
         for result in [analyze(path)]

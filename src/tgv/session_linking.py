@@ -9,7 +9,7 @@ import os
 import re
 import stat
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 
@@ -28,11 +28,13 @@ _CLAUDE_MESSAGE_TYPES = frozenset({"user", "assistant"})
 
 @dataclass(frozen=True)
 class ValidatedSession:
-    """Validated session metadata; deliberately excludes the file path and contents."""
+    """Validated session metadata and the exact bytes that were validated."""
 
     agent: str
     external_session_id: str
     content_hash: str
+    session_path: Path
+    content: bytes = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -51,7 +53,7 @@ def supported_agents() -> tuple[str, ...]:
 
 
 def validate_agent_session(path: Path, agent: str) -> ValidatedSession:
-    """Validate a supported session file without retaining its path or contents."""
+    """Validate a supported session file and return its exact validated bytes."""
     normalized = agent.strip().lower()
     validator = _AGENT_VALIDATORS.get(normalized)
     if validator is None:
@@ -59,7 +61,7 @@ def validate_agent_session(path: Path, agent: str) -> ValidatedSession:
         raise ValidationFailure(
             f"Unsupported agent session format {agent!r}; supported formats: {supported}"
         )
-    session_id, content_hash = validator(path.expanduser())
+    session_id, content_hash, content = validator(path.expanduser())
     if not _SESSION_ID.fullmatch(session_id):
         raise ValidationFailure(
             "Agent session id must be a bounded token using letters, digits, "
@@ -69,6 +71,8 @@ def validate_agent_session(path: Path, agent: str) -> ValidatedSession:
         agent=normalized,
         external_session_id=session_id,
         content_hash=content_hash,
+        session_path=path.expanduser().absolute(),
+        content=content,
     )
 
 
@@ -101,6 +105,7 @@ def link_session_to_task(
             agent=validated.agent,
             external_session_id=validated.external_session_id,
             content_hash=validated.content_hash,
+            session_path=str(validated.session_path),
             expected_repository_id=ledger.repository_id(repository_root),
             attempt_id=attempt_id,
         )
@@ -151,7 +156,7 @@ def _open_session_file(path: Path) -> BinaryIO:
         raise
 
 
-def _validate_claude_code(path: Path) -> tuple[str, str]:
+def _validate_claude_code(path: Path) -> tuple[str, str, bytes]:
     if path.suffix.lower() != ".jsonl":
         raise ValidationFailure("Claude Code sessions must be .jsonl files")
 
@@ -159,6 +164,7 @@ def _validate_claude_code(path: Path) -> tuple[str, str]:
     session_id: str | None = None
     saw_user = False
     saw_assistant = False
+    content = bytearray()
     try:
         with _open_session_file(path) as handle:
             line_number = 0
@@ -171,6 +177,7 @@ def _validate_claude_code(path: Path) -> tuple[str, str]:
                         f"Agent session file grew beyond the {MAX_SESSION_BYTES}-byte safety limit"
                     )
                 digest.update(raw_line)
+                content.extend(raw_line)
                 stripped = raw_line.strip()
                 if not stripped:
                     continue
@@ -210,9 +217,9 @@ def _validate_claude_code(path: Path) -> tuple[str, str]:
         raise ValidationFailure(
             "Agent session must contain at least one user and one assistant message"
         )
-    return session_id, digest.hexdigest()
+    return session_id, digest.hexdigest(), bytes(content)
 
 
-_AGENT_VALIDATORS: dict[str, Callable[[Path], tuple[str, str]]] = {
+_AGENT_VALIDATORS: dict[str, Callable[[Path], tuple[str, str, bytes]]] = {
     "claude-code": _validate_claude_code,
 }

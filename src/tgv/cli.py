@@ -24,7 +24,9 @@ from tgv.exceptions import (
     TGVError,
     ValidationFailure,
 )
+from tgv.linked_efficiency import linked_measurement_report, measure_linked_sessions
 from tgv.models import HandoffMode
+from tgv.outcomes import OutcomeLedger
 from tgv.providers import OllamaProvider, OpenAICompatibleProvider
 from tgv.service import TGVService
 from tgv.session_linking import (
@@ -107,7 +109,14 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--json", action="store_true")
 
     efficiency = sub.add_parser("efficiency", help="Report TER efficiency by TGV route")
-    efficiency.add_argument("--sessions", type=_path, default=Path(".tgv/sessions"))
+    efficiency.add_argument("--sessions", type=_path, default=None)
+    efficiency.add_argument(
+        "--linked",
+        action="store_true",
+        help="Score real sessions linked in the outcome ledger instead of synthetic telemetry",
+    )
+    efficiency.add_argument("--repo", type=_path, default=Path.cwd())
+    efficiency.add_argument("--config", type=_path)
     efficiency.add_argument("--format", choices=("text", "json"), default="text")
 
     calibrate = sub.add_parser("calibrate", help="Propose routing thresholds from TER results")
@@ -219,6 +228,13 @@ def build_parser() -> argparse.ArgumentParser:
     report = sub.add_parser("report", help="Report local routing and token-allocation evidence")
     report.add_argument("--sessions", type=_path, default=Path(".tgv/sessions"))
     report.add_argument(
+        "--linked",
+        action="store_true",
+        help="Report persisted measurements for real sessions linked in the outcome ledger",
+    )
+    report.add_argument("--repo", type=_path, default=Path.cwd())
+    report.add_argument("--config", type=_path)
+    report.add_argument(
         "--ter",
         action="store_true",
         help="Use TER-scored aligned/waste tokens instead of coarse telemetry "
@@ -246,6 +262,40 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--config", type=_path)
     search.add_argument("--json", action="store_true")
     return parser
+
+
+def _outcome_ledger(repo: Path, config_path: Path | None) -> OutcomeLedger:
+    config = load_config(config_path)
+    outcome_path = config.intelligence.outcome_database_path
+    if not outcome_path.is_absolute():
+        outcome_path = repo / outcome_path
+    return OutcomeLedger(
+        outcome_path,
+        retain_raw_prompts=config.intelligence.retain_raw_prompts,
+    )
+
+
+def _render_linked_report(report: dict[str, Any]) -> str:
+    overall = report["overall"]
+    lines = [
+        f"source: {report['source']}",
+        f"tasks: {overall['total_tasks']} linked={overall['linked_tasks']} "
+        f"measured={overall['measured_tasks']}",
+        f"sessions: measured={overall['successfully_measured_sessions']} "
+        f"missing_or_invalid={overall['missing_or_invalid_measurements']}",
+        f"outcomes: verified={overall['verified_outcome_tasks']} "
+        f"success={overall['verified_success_tasks']} "
+        f"unverified={overall['unverified_outcome_tasks']}",
+        "group       measurements  tasks  TER     tokens",
+    ]
+    for group_name, groups in report["aggregates"].items():
+        for group, metrics in groups.items():
+            lines.append(
+                f"{group_name}:{group:<12} {metrics['measurement_count']:>12}  "
+                f"{metrics['task_count']:>5}  {metrics['aggregate_ter']:.4f}  "
+                f"{metrics['total_tokens']:>5}"
+            )
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -431,6 +481,17 @@ def main(argv: list[str] | None = None) -> None:
             )
             return
         if args.command == "report":
+            if args.linked:
+                if args.ter:
+                    raise TGVError("report --linked cannot be combined with --ter")
+                ledger = _outcome_ledger(args.repo, args.config)
+                report = linked_measurement_report(ledger, args.repo)
+                print(
+                    json.dumps(report, indent=2, sort_keys=True)
+                    if args.json
+                    else _render_linked_report(report)
+                )
+                return
             value_metrics = (
                 value_report(score_sessions(args.sessions))
                 if args.ter
@@ -458,7 +519,21 @@ def main(argv: list[str] | None = None) -> None:
                 )
             return
         if args.command == "efficiency":
-            report = aggregate_by_route(score_sessions(args.sessions))
+            if args.linked:
+                if args.sessions is not None:
+                    raise TGVError("efficiency --linked cannot be combined with --sessions")
+                ledger = _outcome_ledger(args.repo, args.config)
+                measure_linked_sessions(ledger, args.repo)
+                report = linked_measurement_report(ledger, args.repo)
+                print(
+                    json.dumps(report, indent=2, sort_keys=True)
+                    if args.format == "json"
+                    else _render_linked_report(report)
+                )
+                return
+            report = aggregate_by_route(
+                score_sessions(args.sessions or Path(".tgv/sessions"))
+            )
             if args.format == "json":
                 print(json.dumps(report, indent=2))
             else:
