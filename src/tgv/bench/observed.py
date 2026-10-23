@@ -167,10 +167,12 @@ def _wilson_interval(successes: int, total: int) -> list[float] | None:
     margin = (
         z * (proportion * (1 - proportion) / total + z * z / (4 * total * total)) ** 0.5
     ) / denominator
-    return [
-        round(max(0.0, center - margin), 4),
-        round(min(1.0, center + margin), 4),
-    ]
+    return [max(0.0, center - margin), min(1.0, center + margin)]
+
+
+def _rounded_wilson_interval(successes: int, total: int) -> list[float] | None:
+    interval = _wilson_interval(successes, total)
+    return [round(bound, 4) for bound in interval] if interval is not None else None
 
 
 def _token_metrics(entries: list[_MeasurementView]) -> dict[str, Any]:
@@ -312,7 +314,7 @@ def _group_metrics(
         "verified_success_rate": (
             round(verified_success / verified_outcomes, 4) if verified_outcomes else None
         ),
-        "verified_success_confidence_interval_95": _wilson_interval(
+        "verified_success_confidence_interval_95": _rounded_wilson_interval(
             verified_success, verified_outcomes
         ),
         "selected_analyzer": selected_analyzer,

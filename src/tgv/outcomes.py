@@ -360,19 +360,24 @@ class OutcomeLedger:
         symbols: list[str],
         context_token_estimate: int,
         route: Route | None = None,
+        decision_source: str | None = None,
     ) -> None:
-        metadata: dict[str, Any] | None = None
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT metadata FROM outcomes WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown task id: {task_id}")
+        stored_metadata = json.loads(row["metadata"])
+        if not isinstance(stored_metadata, dict):
+            raise ValueError(f"Outcome task {task_id} has invalid metadata")
+        metadata = dict(stored_metadata)
         if route is not None:
-            with closing(self._connect()) as connection, connection:
-                row = connection.execute(
-                    "SELECT metadata FROM outcomes WHERE task_id = ?", (task_id,)
-                ).fetchone()
-            if row is None:
-                raise KeyError(f"Unknown task id: {task_id}")
-            stored_metadata = json.loads(row["metadata"])
-            if not isinstance(stored_metadata, dict):
-                raise ValueError(f"Outcome task {task_id} has invalid metadata")
-            metadata = {**stored_metadata, "authoritative_route": route.value}
+            metadata["authoritative_route"] = route.value
+        if decision_source is not None:
+            metadata["routing_decision_source"] = decision_source
+        else:
+            metadata.pop("routing_decision_source", None)
         self.assign_routing_decision_id(task_id)
         values: dict[str, Any] = {
             "revised_complexity_score": revised_profile.complexity_score,
@@ -384,8 +389,7 @@ class OutcomeLedger:
             "retrieved_symbols": json.dumps(symbols),
             "context_token_estimate": context_token_estimate,
         }
-        if metadata is not None:
-            values["metadata"] = json.dumps(metadata, sort_keys=True)
+        values["metadata"] = json.dumps(metadata, sort_keys=True)
         self._update(task_id, **values)
 
     def record_execution(

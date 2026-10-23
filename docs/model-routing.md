@@ -24,3 +24,97 @@ Parameter count is not used as the primary routing criterion. Model quality, act
 ## Execution scope
 
 TGV 0.22 selects profiles and prepares handoffs. Local routing uses the configured Ollama-compatible provider. External execution remains adapter-driven through the existing command handoff interface; provider-specific autonomous execution, retries, tool normalization, and validation loops remain future work.
+
+## Evidence-gated threshold calibration
+
+Evidence mode provides observational diagnostics and conservative **no-change**
+recommendations:
+
+```bash
+# Inspect evidence without writing configuration or migrating the ledger
+tgv calibrate --evidence --repo . --config tgv.yaml --json
+
+# Retained explicit interface; current historical-only recommendations do not write
+tgv calibrate --evidence --repo . --config tgv.yaml --apply
+```
+
+`local_answer_confidence` and `local_code_confidence` control acceptance of model
+suggestions for `local_fast` and `local_code`, respectively. They do not control local
+provider eligibility. Rejecting a suggestion returns to deterministic fallback routing,
+which may select the same route, another local route, or a less capable route. Scoreboard
+ranking and safety overrides remain unchanged and do not use these acceptance thresholds.
+
+High TER waste and a strong observed success rate do not establish what rejecting model
+suggestions would do. Evidence mode has no numerical adjustment rule. It preserves each
+configured threshold, reports `direction=none`, and sets `application_permitted=false`.
+Even when every descriptive evidence check passes, the recommendation is no change.
+There is no automatic application, new routing policy, or inferred causal benefit.
+
+### Evidence and statistical semantics
+
+The command resolves `intelligence.outcome_database_path` like the execution service:
+relative paths are relative to `--repo` (or the current directory), and absolute paths
+are used as configured. It reads persisted aggregates only, without invoking a provider,
+reading session content, creating a database, repairing measurements, or migrating schemas.
+Older database schemas require an explicit writable upgrade through an existing command.
+
+Target populations require an authoritative local route and decision source `model`.
+Deterministic, scoreboard, safety-override, frontier, missing, and invalid provenance are
+excluded. Historical route/source metadata may be missing; it is never inferred.
+Replacing routing information through the legacy API clears an omitted decision source.
+
+The report separates:
+
+- **Availability:** eligible tasks, verified outcomes, valid comparable measurements,
+  and distinct tasks paired with both outcomes and measurements. Descriptive minimums
+  are 20 verified outcomes, 20 measurements, and 20 paired tasks per target.
+- **Correctness confidence:** verified successes divided by verified successes plus
+  verified failures, following the existing outcome contract. Unverified and incomplete
+  tasks do not enter that denominator. Verification coverage uses all eligible tasks.
+  The 95% Wilson lower bound is compared with 0.90 at full floating-point precision;
+  displayed interval values are rounded. A displayed 0.9000 can therefore accompany a
+  failed gate when the actual bound is slightly below 0.90.
+- **Efficiency observations:** one canonical valid measurement per session, then one
+  globally selected analyzer/version scope shared by all groups. TER CLI 3.0.0 is the
+  supported calibration scope. Invalid metrics are excluded and counted; totals must
+  match aligned plus waste tokens when supplied. Valid historical measurements without
+  totals remain supported. Aggregate TER is token-weighted; waste is waste tokens divided
+  by total tokens. Measured zero-token populations have TER 1.0 and waste 0.0; absent
+  measurements have null TER and null waste.
+- **Intervention eligibility:** always false for the current historical-only evidence.
+  Minimum samples and a passing correctness diagnostic are not proof of causal validity.
+
+Task outcomes count once. Repeated attempts contribute session-level measurements and
+token weight, not independent correctness evidence. Efficiency includes failed,
+unverified, and incomplete attempts associated with eligible tasks. Pairing is at task
+level, so a measured attempt need not be the attempt that ultimately succeeded. Report-wide
+invalid measurement counts include excluded populations and unattributed measurements;
+per-target counts cover invalid measurements attached to that target's eligible sessions.
+
+Verification coverage, missing measurements, selection bias, task difficulty, model
+selection, and historical policy changes limit interpretation. Wilson intervals describe
+observed verified outcomes; they do not remove these biases. TER efficiency is separate
+from verified correctness. These diagnostics do not implement confidence calibration or
+counterfactual execution analysis.
+
+### Explicit application safety
+
+`--apply` requires `--config`, rejects symbolic-link configuration files, and performs no
+configuration write or lock-file creation when no eligible proposal exists. Current
+evidence recommendations are all ineligible. The retained application helper is tested
+with hypothetical eligible proposals separately from the evidence engine.
+
+For an eligible proposal, application uses a stable adjacent advisory lock, validates the
+complete configuration under that lock, and rechecks file identity and content immediately
+before atomic replacement. Cooperating processes serialize; stale snapshots are rejected.
+Ordinary permission bits and unrelated configuration values are preserved. YAML comments
+and formatting may change. Temporary files are cleaned up on write/replacement failure;
+the lock file intentionally remains so all processes use the same lock inode.
+
+The writer requires POSIX advisory locking and fails closed if it is unavailable.
+Non-cooperating external writers can still race the final check: advisory locking cannot
+provide a filesystem compare-and-swap. Ownership, ACLs, extended attributes, and crash
+recovery durability are not promised by ordinary permission preservation and atomic rename.
+
+Evidence mode is separate from the unchanged legacy `--sessions` heuristic. It does not
+accept `--sessions`, `--target-waste-ratio`, `--minimum-sessions`, or `--step-size`.

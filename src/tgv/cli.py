@@ -9,6 +9,11 @@ from typing import Any
 
 from tgv import __version__
 from tgv.bench.observed import observed_benchmark, render_observed_benchmark
+from tgv.calibration import (
+    apply_evidence_calibration,
+    evidence_calibration,
+    render_evidence_calibration,
+)
 from tgv.config import load_config
 from tgv.efficiency import (
     aggregate_by_route,
@@ -121,17 +126,20 @@ def build_parser() -> argparse.ArgumentParser:
     efficiency.add_argument("--format", choices=("text", "json"), default="text")
 
     calibrate = sub.add_parser("calibrate", help="Propose routing thresholds from TER results")
-    calibrate.add_argument("--sessions", type=_path, default=Path(".tgv/sessions"))
+    calibrate.add_argument("--evidence", action="store_true")
+    calibrate.add_argument("--repo", type=_path)
+    calibrate.add_argument("--sessions", type=_path)
     calibrate.add_argument("--config", type=_path)
-    calibrate.add_argument("--target-waste-ratio", type=float, default=0.25)
-    calibrate.add_argument("--minimum-sessions", type=int, default=5)
-    calibrate.add_argument("--step-size", type=float, default=0.05)
+    calibrate.add_argument("--target-waste-ratio", type=float)
+    calibrate.add_argument("--minimum-sessions", type=int)
+    calibrate.add_argument("--step-size", type=float)
     calibrate.add_argument(
         "--apply",
         action="store_true",
         help="Rewrite the validated YAML model; comments and key order may change",
     )
-    calibrate.add_argument("--format", choices=("text", "json"), default="text")
+    calibrate.add_argument("--format", choices=("text", "json"))
+    calibrate.add_argument("--json", action="store_true")
 
     bench = sub.add_parser("bench", help="Run deterministic routing or index diagnostics")
     bench_sub = bench.add_subparsers(dest="benchmark", required=True)
@@ -422,15 +430,62 @@ def main(argv: list[str] | None = None) -> None:
         if args.command == "calibrate":
             import yaml
 
+            if args.evidence:
+                if args.sessions is not None:
+                    raise TGVError("--evidence does not support --sessions")
+                if (
+                    args.target_waste_ratio is not None
+                    or args.minimum_sessions is not None
+                    or args.step_size is not None
+                ):
+                    raise TGVError(
+                        "--evidence does not support legacy threshold tuning options"
+                    )
+                if args.json and args.format == "text":
+                    raise TGVError("--json cannot be combined with --format text")
+            elif args.json or args.repo is not None:
+                raise TGVError("--json and --repo require --evidence")
+
             config = load_config(args.config)
-            report = aggregate_by_route(score_sessions(args.sessions))
+            if args.evidence:
+                original_bytes = args.config.read_bytes() if args.config is not None else b""
+                repository_root = args.repo or Path.cwd()
+                outcome_path = config.intelligence.outcome_database_path
+                if not outcome_path.is_absolute():
+                    outcome_path = repository_root / outcome_path
+                ledger = OutcomeLedger(outcome_path, read_only=True)
+                report = evidence_calibration(ledger, config, repository_root)
+                if args.apply:
+                    if args.config is None:
+                        raise TGVError("--apply requires --config")
+                    report = apply_evidence_calibration(
+                        report,
+                        args.config,
+                        config,
+                        original_bytes,
+                    )
+                if args.json or args.format == "json":
+                    print(json.dumps(report, indent=2, sort_keys=True))
+                else:
+                    print(render_evidence_calibration(report))
+                return
+
+            sessions = args.sessions or Path(".tgv/sessions")
+            output_format = args.format or ("json" if args.json else "text")
+            report = aggregate_by_route(score_sessions(sessions))
             proposals = propose_thresholds(
                 report,
                 local_answer_confidence=config.routing.local_answer_confidence,
                 local_code_confidence=config.routing.local_code_confidence,
-                target_waste_ratio=args.target_waste_ratio,
-                minimum_sessions=args.minimum_sessions,
-                step_size=args.step_size,
+                target_waste_ratio=(
+                    args.target_waste_ratio
+                    if args.target_waste_ratio is not None
+                    else 0.25
+                ),
+                minimum_sessions=(
+                    args.minimum_sessions if args.minimum_sessions is not None else 5
+                ),
+                step_size=args.step_size if args.step_size is not None else 0.05,
             )
             if args.apply:
                 # The validated model is serialized; YAML order and comments may change.
@@ -447,7 +502,7 @@ def main(argv: list[str] | None = None) -> None:
                     yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False),
                     encoding="utf-8",
                 )
-            if args.format == "json":
+            if output_format == "json":
                 print(json.dumps([proposal.__dict__ for proposal in proposals], indent=2))
             else:
                 for proposal in proposals:

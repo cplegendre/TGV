@@ -264,14 +264,46 @@ The tuning controls are:
 - `--minimum-sessions 5`: minimum route volume required before proposing a change.
 - `--step-size 0.05`: amount by which a confidence threshold is raised or lowered.
 
-When a local route's observed waste ratio exceeds the target, TGV proposes raising its
-confidence threshold so fewer uncertain tasks stay local. When waste is low and the route
-has sufficient volume, it proposes lowering the threshold slightly so more work can remain
-local. Routes below the minimum session count are reported as insufficient data and are
-not changed.
+The legacy session heuristic proposes raising a threshold when observed waste exceeds
+the target and lowering it when waste is low and volume is sufficient. These thresholds
+control model-suggestion acceptance; rejected suggestions fall back to deterministic
+routing, which may still select a local route. The heuristic does not establish a
+correctness or efficiency benefit. Routes below the minimum session count are unchanged.
 
 `--apply` rewrites the selected YAML file from TGV's validated configuration model. The
 result remains semantically equivalent, but comments and key ordering may change.
+
+### Calibrate from verified linked evidence
+
+Evidence calibration reports linked outcome and persisted TER diagnostics without
+proposing numerical threshold changes:
+
+```bash
+tgv calibrate --evidence --repo . --json
+tgv calibrate --evidence --repo . --config tgv.yaml --apply
+```
+
+The confidence thresholds control acceptance of model routing suggestions. Rejected
+suggestions fall back to deterministic routing, which can select the same route or a
+less capable local route. High TER waste therefore does not justify raising a threshold.
+Historical success and efficiency alone cannot establish the effect of that intervention.
+
+Evidence mode reports verified successes and failures, verification coverage, a 95%
+Wilson interval, comparable TER CLI 3.0.0 measurements, paired task counts, invalid
+measurements, and waste. The correctness diagnostic requires at least 20 verified
+outcomes and an **unrounded** Wilson lower bound of 0.90. Separate availability checks
+require 20 measurements and 20 paired tasks; these counts do not prove causal validity.
+TER efficiency is separate from correctness, and confidence intervals remain observational.
+
+Only authoritative `local_fast` and `local_code` routes with a recorded `model` decision
+source contribute to target diagnostics. Historical records may lack route or source
+metadata; these records are excluded rather than inferred. The configured outcome database
+is read without creation or migration. Missing efficiency is reported as unavailable.
+
+Recommendations preserve the configured thresholds and set `application_permitted=false`.
+The default is read-only. `--apply` remains explicit but cannot modify configuration
+without a defensible eligible proposal; the current evidence engine emits none.
+See [model routing](docs/model-routing.md) for statistical and application limitations.
 
 ### Explain routing and inspect local health
 

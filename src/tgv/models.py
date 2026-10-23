@@ -338,7 +338,9 @@ class TerMeasurement(BaseModel):
     analyzer: str
     analyzer_version: str
     measured_at: datetime
-    metrics: dict[str, float | int | None] = Field(default_factory=dict)
+    # Preserve historical booleans so measurement eligibility can reject them,
+    # rather than Pydantic coercing them into numeric token counts.
+    metrics: dict[str, float | int | bool | None] = Field(default_factory=dict)
 
 
 class CandidateScore(BaseModel):
