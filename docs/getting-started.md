@@ -150,15 +150,22 @@ efficiency. For real sessions, link the session and use `tgv efficiency --linked
 
 ## Inspect linked evidence
 
-Once real sessions are linked and verified, the read-only evidence commands are:
+`tgv efficiency --linked` is a measurement operation: it revalidates each linked session, invokes
+TER, and persists aggregate measurements in the outcome ledger. It is the only linked-evidence
+command that writes.
+
+Once measurements are persisted and outcomes are verified, the read-only evidence commands are:
 
 ```bash
-tgv efficiency --linked --repo . --format json
 tgv report --linked --repo . --json
 tgv benchmark observed --repo . --json
 tgv calibrate --evidence --repo . --json
 tgv confidence --repo . --json
 ```
+
+These reports never create, migrate, or repair the ledger. When the ledger is missing they return
+an empty or insufficient-evidence result instead of writing a database, and they fail with a
+controlled error for unsupported schema versions or unreadable records.
 
 These commands have different inputs and minimum samples. See
 [steps 8–13 of the workflow](tgv-ter-workflow.md#8-analyze-execution-efficiency-with-ter) before

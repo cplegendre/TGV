@@ -561,7 +561,7 @@ def main(argv: list[str] | None = None) -> None:
             if args.linked:
                 if args.ter:
                     raise TGVError("report --linked cannot be combined with --ter")
-                ledger = _outcome_ledger(args.repo, args.config)
+                ledger = _outcome_ledger(args.repo, args.config, read_only=True)
                 report = linked_measurement_report(ledger, args.repo)
                 print(
                     json.dumps(report, indent=2, sort_keys=True)

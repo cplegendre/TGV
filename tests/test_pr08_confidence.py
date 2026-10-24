@@ -648,9 +648,7 @@ def test_missing_projection_column_produces_safe_schema_error(repo: Path) -> Non
         _report(repo)
 
 
-@pytest.mark.parametrize(
-    "column", ["metadata", "task_category", "timestamp", "selected_capability_tier"]
-)
+@pytest.mark.parametrize("column", ["task_category", "timestamp", "selected_capability_tier"])
 def test_malformed_task_errors_do_not_echo_raw_values(
     repo: Path,
     capsys: pytest.CaptureFixture[str],
@@ -666,6 +664,17 @@ def test_malformed_task_errors_do_not_echo_raw_values(
     captured = capsys.readouterr()
     assert "malformed task fields or routing metadata" in captured.err
     assert SECRET not in captured.err + captured.out
+
+
+def test_malformed_metadata_is_attributed_without_echoing_raw_values(repo: Path) -> None:
+    _task(repo)
+    with closing(sqlite3.connect(_ledger(repo).path)) as connection, connection:
+        connection.execute("UPDATE outcomes SET metadata = ?", (SECRET,))
+    report = _report(repo)
+    assert report["overall"]["scored_observations"] == 1
+    assert report["groups"]["by_provenance_status"]["invalid-provenance"]["total_tasks"] == 1
+    assert report["groups"]["by_decision_source"]["invalid-decision-source"]["total_tasks"] == 1
+    assert SECRET not in json.dumps(report)
 
 
 def test_duplicate_task_ids_in_malformed_table_are_rejected(repo: Path) -> None:

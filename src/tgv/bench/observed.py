@@ -18,7 +18,7 @@ from tgv.linked_efficiency import (
     _route_for_task,
 )
 from tgv.models import ExecutionAttempt, OutcomeTask
-from tgv.outcomes import OutcomeLedger
+from tgv.outcomes import LedgerDiagnostics, OutcomeLedger
 
 
 class ObservedBenchmarkError(TGVError):
@@ -58,6 +58,7 @@ class _ObservationData:
     tasks: list[TaskObservation]
     unattributed_invalid_measurements: int
     selected_analyzer_scope: tuple[str, str] | None
+    diagnostics: LedgerDiagnostics
 
 
 def _outcome_status(task: OutcomeTask) -> str:
@@ -72,6 +73,15 @@ def _outcome_status(task: OutcomeTask) -> str:
 
 
 def _load_observations(ledger: OutcomeLedger, repository_root: Path) -> _ObservationData:
+    with ledger.evidence_read() as diagnostics:
+        return _load_observations_with(ledger, repository_root, diagnostics)
+
+
+def _load_observations_with(
+    ledger: OutcomeLedger,
+    repository_root: Path,
+    diagnostics: LedgerDiagnostics,
+) -> _ObservationData:
     linked = _load_linked_ledger(ledger, repository_root)
     links_by_id = {
         link.session_link_id: (task, attempt, link) for task, attempt, link in linked.links
@@ -94,6 +104,9 @@ def _load_observations(ledger: OutcomeLedger, repository_root: Path) -> _Observa
                 continue
             association = links_by_id.get(measurement.session_link_id)
             if association is None:
+                if measurement.session_link_id in diagnostics.quarantined_session_link_ids:
+                    diagnostics.excluded_measurements += 1
+                    continue
                 raise ObservedBenchmarkError(
                     f"Measurement {measurement.measurement_id} has an invalid session association"
                 )
@@ -154,6 +167,7 @@ def _load_observations(ledger: OutcomeLedger, repository_root: Path) -> _Observa
         tasks=tasks,
         unattributed_invalid_measurements=unattributed_invalid_measurements,
         selected_analyzer_scope=_select_analyzer_scope(canonical_entries),
+        diagnostics=diagnostics,
     )
 
 
@@ -467,6 +481,7 @@ def observed_benchmark(ledger: OutcomeLedger, repository_root: Path) -> dict[str
     overall = _group_metrics(data.tasks, selected_scope)
     overall["invalid_measurement_count"] += data.unattributed_invalid_measurements
     overall["unattributed_invalid_measurements"] = data.unattributed_invalid_measurements
+    overall["invalid_records"] = data.diagnostics.to_dict()
     observations = [
         _serialize_session(session, selected_scope)
         for task in data.tasks

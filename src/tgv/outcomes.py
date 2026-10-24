@@ -9,12 +9,12 @@ import os
 import re
 import sqlite3
 import uuid
-from collections.abc import Iterable, Mapping
-from contextlib import closing, suppress
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import closing, contextmanager, suppress
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from tgv.exceptions import (
     ConflictingMeasurementError,
@@ -36,6 +36,69 @@ from tgv.models import (
 
 _SCHEMA_VERSION = 3
 _CONTENT_HASH = re.compile(r"^[0-9a-f]{64}$")
+_ROW_DECODE_ERRORS = (KeyError, IndexError, TypeError, ValueError)
+_RowT = TypeVar("_RowT")
+
+_INVALID_RECORD_POLICY = (
+    "unreadable records are quarantined with their dependent attempts, sessions, and "
+    "measurements; quarantined records are excluded from every denominator and are never "
+    "counted as verified successes or failures"
+)
+
+
+def safe_json_object(raw: Any) -> dict[str, Any] | None:
+    """Decode a persisted JSON object without raising or echoing the raw value."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _coerce_finite_number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _row_value(row: Any, name: str) -> Any:
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return None
+
+
+@dataclass
+class LedgerDiagnostics:
+    """Counts of quarantined or repaired records observed during an evidence read."""
+
+    excluded_tasks: int = 0
+    excluded_attempts: int = 0
+    excluded_sessions: int = 0
+    excluded_measurements: int = 0
+    invalid_metadata_tasks: int = 0
+    invalid_confidence_tasks: int = 0
+    invalid_measurement_metrics: int = 0
+    quarantined_task_ids: set[str] = field(default_factory=set)
+    quarantined_session_link_ids: set[str] = field(default_factory=set)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "policy": _INVALID_RECORD_POLICY,
+            "excluded_tasks": self.excluded_tasks,
+            "excluded_attempts": self.excluded_attempts,
+            "excluded_sessions": self.excluded_sessions,
+            "excluded_measurements": self.excluded_measurements,
+            "invalid_metadata_tasks": self.invalid_metadata_tasks,
+            "invalid_confidence_tasks": self.invalid_confidence_tasks,
+            "invalid_measurement_metrics": self.invalid_measurement_metrics,
+        }
 
 
 @dataclass(frozen=True)
@@ -80,9 +143,11 @@ class OutcomeLedger:
         self.path = path
         self.retain_raw_prompts = retain_raw_prompts
         self.read_only = read_only
+        self._force_read_only = False
+        self._diagnostics: LedgerDiagnostics | None = None
 
     def _connect(self) -> sqlite3.Connection:
-        if self.read_only:
+        if self.read_only or self._force_read_only:
             return self._connect_read_only()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=5.0)
@@ -94,6 +159,32 @@ class OutcomeLedger:
         connection.execute("PRAGMA foreign_keys = ON")
         self._initialize(connection)
         return connection
+
+    @property
+    def diagnostics(self) -> LedgerDiagnostics | None:
+        """Diagnostics for the active evidence read, if one is in progress."""
+        return self._diagnostics
+
+    @contextmanager
+    def evidence_read(self) -> Iterator[LedgerDiagnostics]:
+        """Read evidence through read-only connections and quarantine invalid rows.
+
+        Every connection opened inside this context uses SQLite ``mode=ro``, so no
+        database, schema, or record is created or modified even when the ledger object
+        was constructed as writable. Nested use shares the outer context.
+        """
+        if self._diagnostics is not None:
+            yield self._diagnostics
+            return
+        diagnostics = LedgerDiagnostics()
+        previous = self._force_read_only
+        self._force_read_only = True
+        self._diagnostics = diagnostics
+        try:
+            yield diagnostics
+        finally:
+            self._diagnostics = None
+            self._force_read_only = previous
 
     def _connect_read_only(self) -> sqlite3.Connection:
         if not self.path.is_file():
@@ -1040,7 +1131,7 @@ class OutcomeLedger:
                 "SELECT * FROM execution_attempts WHERE task_id = ? ORDER BY attempt_number",
                 (task_id,),
             ).fetchall()
-        return [self._row_to_attempt(row) for row in rows]
+        return self._decoded_rows(rows, self._read_attempt)
 
     def all_execution_attempts(self) -> list[ExecutionAttempt]:
         """Return every execution attempt, ordered by task and attempt number."""
@@ -1048,7 +1139,7 @@ class OutcomeLedger:
             rows = connection.execute(
                 "SELECT * FROM execution_attempts ORDER BY task_id, attempt_number"
             ).fetchall()
-        return [self._row_to_attempt(row) for row in rows]
+        return self._decoded_rows(rows, self._read_attempt)
 
     def agent_sessions(self, attempt_id: str) -> list[AgentSessionLink]:
         """Return external agent-session links recorded for an attempt."""
@@ -1061,7 +1152,7 @@ class OutcomeLedger:
                 "ORDER BY linked_at, session_link_id",
                 (attempt_id,),
             ).fetchall()
-        return [self._row_to_session_link(row) for row in rows]
+        return self._decoded_rows(rows, self._read_session_link)
 
     def ter_measurements(self, attempt_id: str) -> list[TerMeasurement]:
         """Return TER-style measurements recorded for an attempt."""
@@ -1071,7 +1162,7 @@ class OutcomeLedger:
                 "ORDER BY measured_at, measurement_id",
                 (attempt_id,),
             ).fetchall()
-        return [self._row_to_measurement(row) for row in rows]
+        return self._decoded_rows(rows, self._read_measurement)
 
     def _update(self, task_id: str, **values: Any) -> None:
         if not values:
@@ -1121,7 +1212,90 @@ class OutcomeLedger:
                 f"SELECT * FROM outcomes{where} ORDER BY timestamp DESC, task_id LIMIT ?",
                 (*values, limit),
             ).fetchall()
-        return [self._row_to_model(row) for row in rows]
+        return self._decoded_rows(rows, self._read_task)
+
+    def _decoded_rows(
+        self, rows: Iterable[Any], decoder: Callable[[Any], _RowT | None]
+    ) -> list[_RowT]:
+        decoded = [decoder(row) for row in rows]
+        return [value for value in decoded if value is not None]
+
+    def _quarantine(self, row: Any, kind: str) -> None:
+        diagnostics = self._diagnostics
+        if diagnostics is None:
+            raise LedgerReadError(
+                f"Outcome ledger contains an unreadable {kind} record; "
+                "the record cannot be interpreted safely"
+            ) from None
+        if kind == "task":
+            diagnostics.excluded_tasks += 1
+            task_id = _row_value(row, "task_id")
+            if isinstance(task_id, str):
+                diagnostics.quarantined_task_ids.add(task_id)
+        elif kind == "attempt":
+            diagnostics.excluded_attempts += 1
+        elif kind == "session":
+            diagnostics.excluded_sessions += 1
+            session_link_id = _row_value(row, "session_link_id")
+            if isinstance(session_link_id, str):
+                diagnostics.quarantined_session_link_ids.add(session_link_id)
+        else:
+            diagnostics.excluded_measurements += 1
+
+    def _read_task(self, row: Any) -> OutcomeTask | None:
+        diagnostics = self._diagnostics
+        if diagnostics is None:
+            try:
+                return self._row_to_model(row)
+            except _ROW_DECODE_ERRORS:
+                self._quarantine(row, "task")
+                return None
+        data = dict(row)
+        if safe_json_object(data.get("metadata")) is None:
+            diagnostics.invalid_metadata_tasks += 1
+            data["metadata"] = "{}"
+        if data.get("routing_confidence") is not None:
+            confidence = _coerce_finite_number(data["routing_confidence"])
+            if confidence is None:
+                diagnostics.invalid_confidence_tasks += 1
+            data["routing_confidence"] = confidence
+        try:
+            return self._row_to_model(data)
+        except _ROW_DECODE_ERRORS:
+            self._quarantine(row, "task")
+            return None
+
+    def _read_attempt(self, row: Any) -> ExecutionAttempt | None:
+        try:
+            return self._row_to_attempt(row)
+        except _ROW_DECODE_ERRORS:
+            self._quarantine(row, "attempt")
+            return None
+
+    def _read_session_link(self, row: Any) -> AgentSessionLink | None:
+        try:
+            return self._row_to_session_link(row)
+        except _ROW_DECODE_ERRORS:
+            self._quarantine(row, "session")
+            return None
+
+    def _read_measurement(self, row: Any) -> TerMeasurement | None:
+        diagnostics = self._diagnostics
+        if diagnostics is None:
+            try:
+                return self._row_to_measurement(row)
+            except _ROW_DECODE_ERRORS:
+                self._quarantine(row, "measurement")
+                return None
+        data = dict(row)
+        if safe_json_object(data.get("metrics")) is None:
+            diagnostics.invalid_measurement_metrics += 1
+            data["metrics"] = "{}"
+        try:
+            return self._row_to_measurement(data)
+        except _ROW_DECODE_ERRORS:
+            self._quarantine(row, "measurement")
+            return None
 
     def export_json(self, records: Iterable[OutcomeTask] | None = None) -> str:
         selected = list(records) if records is not None else self.query(limit=10000)
@@ -1164,7 +1338,7 @@ class OutcomeLedger:
         return buffer.getvalue()
 
     @staticmethod
-    def _row_to_model(row: sqlite3.Row) -> OutcomeTask:
+    def _row_to_model(row: Any) -> OutcomeTask:
         def optional_bool(name: str) -> bool | None:
             value = row[name]
             return None if value is None else bool(value)
@@ -1204,7 +1378,7 @@ class OutcomeLedger:
         )
 
     @staticmethod
-    def _row_to_attempt(row: sqlite3.Row) -> ExecutionAttempt:
+    def _row_to_attempt(row: Any) -> ExecutionAttempt:
         return ExecutionAttempt(
             attempt_id=row["attempt_id"],
             task_id=row["task_id"],
@@ -1221,7 +1395,7 @@ class OutcomeLedger:
         )
 
     @staticmethod
-    def _row_to_session_link(row: sqlite3.Row) -> AgentSessionLink:
+    def _row_to_session_link(row: Any) -> AgentSessionLink:
         return AgentSessionLink(
             session_link_id=row["session_link_id"],
             attempt_id=row["attempt_id"],
@@ -1233,7 +1407,7 @@ class OutcomeLedger:
         )
 
     @staticmethod
-    def _row_to_measurement(row: sqlite3.Row) -> TerMeasurement:
+    def _row_to_measurement(row: Any) -> TerMeasurement:
         return TerMeasurement(
             measurement_id=row["measurement_id"],
             attempt_id=row["attempt_id"],
