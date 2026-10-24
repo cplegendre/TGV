@@ -231,11 +231,40 @@ Inspect persisted measurements without invoking TER:
 tgv report --linked --repo "$TGV_REPO" --json
 ```
 
+Unlike `tgv efficiency --linked`, this command is strictly read-only: it never invokes TER,
+creates the database, migrates the schema, or writes measurements. When the ledger does not exist,
+the report returns `status: "empty"` with zero counts instead of creating
+`.tgv/outcomes.sqlite3`. SQLite may create transient WAL coordination sidecars for an existing WAL
+database; the ledger contents and schema are unchanged.
+
 The linked report separates raw measurements from deterministic aggregates. For each linked
 session, the most recent valid measurement wins, with measurement ID breaking ties. When multiple
 TER analyzer versions exist, one global analyzer/version scope with the most measured sessions is
 used for comparisons; ties break lexicographically. Earlier measurements remain visible as
 superseded records but do not count twice.
+
+### Invalid and unreadable records
+
+The read-only evidence reports (`report --linked`, `benchmark observed`, `calibrate --evidence`,
+and `confidence`) never emit a traceback or raw persisted values for malformed data:
+
+- A `metadata` value that is not a JSON object is treated as `{}`, counted as
+  `invalid_metadata_tasks`, and listed under `invalid_records`. Provenance derived from it becomes
+  `unavailable` or invalid (`invalid-route` / `invalid-decision-source` in confidence diagnostics);
+  the task itself remains usable evidence.
+- An invalid `routing_confidence` value is reported as null and counted. In confidence
+  diagnostics it remains visible in coverage but is excluded from Brier/ECE scoring, exactly as in
+  earlier releases.
+- A row that cannot be decoded (missing required field, unexpected type, unreadable enum, invalid
+  JSON in a list field) is quarantined together with its dependent attempts, sessions, and
+  measurements. Quarantined records are excluded from every denominator, are never counted as
+  verified successes or failures, and are counted under `invalid_records`.
+- An unsupported schema version aborts the report with a controlled error; read-only commands never
+  migrate the schema. Upgrade the ledger with a writable TGV command first.
+
+`invalid_records` appears under `overall` in the linked and observational reports and under
+`coverage` in evidence calibration. Every block states the exclusion policy, so a reduced task
+count can be distinguished from missing data.
 
 ## 10. Generate outcome and efficiency reports
 
@@ -316,6 +345,11 @@ unique task at most once, using only verified outcomes with finite numeric confi
 Completed-unverified and incomplete tasks are excluded from scores and remain visible in coverage
 counts. Missing, nonnumeric, nonfinite, out-of-range, and boolean confidence values are rejected
 without clamping or fabrication.
+
+Malformed `metadata` is not fatal: a value that is not a JSON object is treated as unavailable
+provenance (`invalid-route` / `invalid-decision-source`) instead of aborting the report. Task rows
+that cannot be decoded produce a controlled error without echoing persisted values, and unsupported
+schema versions are never migrated.
 
 The report includes:
 

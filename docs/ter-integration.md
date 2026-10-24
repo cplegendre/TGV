@@ -132,6 +132,13 @@ unverified task counts separately. A task that completed without positive valida
 not counted as a verified success. Missing, changed, or identity-mismatched session files are
 rejected during measurement.
 
+`tgv report --linked` is read-only: it never invokes TER, creates the ledger, migrates the schema,
+or writes measurements. A repository without an outcome ledger receives `status: "empty"` rather
+than a new database. Records that cannot be decoded are quarantined with their dependent attempts,
+sessions, and measurements and counted under `overall.invalid_records`; they are excluded from
+every denominator and never counted as verified outcomes. See
+[invalid and unreadable records](tgv-ter-workflow.md#invalid-and-unreadable-records).
+
 Measurement history is preserved, but aggregation is deterministic: for each linked session, TGV
 uses only the most recent valid measurement and marks earlier measurements as superseded in the
 raw record list. Ties are broken by measurement identifier. This prevents multiple analyzer

@@ -22,7 +22,7 @@ from tgv.bench.observed import (
 from tgv.exceptions import TGVError
 from tgv.linked_efficiency import _aggregate, _MeasurementView, _route_for_task
 from tgv.models import Route, TGVConfig
-from tgv.outcomes import OutcomeLedger
+from tgv.outcomes import LedgerDiagnostics, OutcomeLedger
 
 SUPPORTED_ANALYZER = "TER CLI"
 SUPPORTED_ANALYZER_VERSION = "3.0.0"
@@ -289,6 +289,7 @@ def _serialize_report(
     route_counts: Counter[str],
     source_counts: Counter[str],
     unattributed_invalid_measurements: int = 0,
+    invalid_records: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     linked_tasks = sum(bool(task.sessions) for task in tasks)
     return {
@@ -309,6 +310,9 @@ def _serialize_report(
             "unattributed_invalid_measurements": unattributed_invalid_measurements,
             "route_counts": dict(sorted(route_counts.items())),
             "routing_decision_source_counts": dict(sorted(source_counts.items())),
+            "invalid_records": invalid_records
+            if invalid_records is not None
+            else LedgerDiagnostics().to_dict(),
             "excluded_task_count": len(tasks)
             - sum(
                 _route_for_task(task.task) in {route.value for route, _ in _TARGETS}
@@ -381,6 +385,7 @@ def evidence_calibration(
         route_counts,
         source_counts,
         data.unattributed_invalid_measurements,
+        data.diagnostics.to_dict(),
     )
 
 

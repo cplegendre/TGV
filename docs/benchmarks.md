@@ -84,6 +84,16 @@ outcomes are absent, limited when either sample is below 20, and sufficient when
 at least 20. This threshold is a conservative reporting warning, not a calibration gate or
 proof of causality.
 
+Malformed persisted records never abort the report or echo raw values. A `metadata` value that is
+not a JSON object is treated as `{}` and counted as `invalid_metadata_tasks`; an invalid confidence
+value is reported as null and counted. A row that cannot be decoded is quarantined together with
+its dependent attempts, sessions, and measurements, excluded from every denominator, and never
+counted as a verified success or failure. These counts appear under
+`coverage.invalid_records` (also `overall.invalid_records` in `report --linked`). Read-only reporting
+never creates or migrates the ledger; SQLite may create transient WAL coordination sidecars for an
+existing WAL database. See
+[invalid and unreadable records](tgv-ter-workflow.md#invalid-and-unreadable-records).
+
 The benchmark is observational evidence, not a causal experiment. Selection
 bias, task difficulty, model-selection confounding, missing measurements, unequal verification
 coverage, analyzer-version differences, repeated attempts, and the absence of counterfactual
@@ -103,9 +113,11 @@ This command measures observed alignment between persisted routing confidence an
 outcomes. It does not execute agents, invoke TER, load session content, create indexes, or
 modify routing/configuration. It uses the same read-only ledger access and schema checks as
 the observational benchmark: missing ledgers produce empty reports, incompatible legacy
-schemas require an explicit upgrade elsewhere, and malformed ledgers produce errors without
-echoing task content. SQLite may create transient WAL coordination sidecars for a live WAL
-database; the command does not change journal mode or permissions. Configured relative
+schemas require an explicit upgrade elsewhere, and task records that cannot be decoded produce a
+controlled error without echoing task content. A `metadata` value that is not a JSON object is
+treated as unavailable provenance instead of aborting the report. SQLite may create transient WAL
+coordination sidecars for a live WAL database; the command does not change journal mode or
+permissions. Configured relative
 database paths resolve against `--repo`; absolute paths are used as configured.
 See [the confidence workflow step](tgv-ter-workflow.md#13-run-confidence-diagnostics) for its
 place in the full evidence pipeline.

@@ -12,7 +12,7 @@ from typing import Any
 from tgv.bench.observed import _outcome_status, _wilson_interval
 from tgv.exceptions import LedgerReadError, TGVError
 from tgv.models import OutcomeTask, Route
-from tgv.outcomes import OutcomeLedger
+from tgv.outcomes import OutcomeLedger, safe_json_object
 
 BIN_COUNT = 10
 BIN_EDGES = tuple(index / BIN_COUNT for index in range(BIN_COUNT + 1))
@@ -76,8 +76,8 @@ def _provenance(value: object, allowed: set[str] | frozenset[str], invalid: str)
 
 def _observation(row: dict[str, Any]) -> ConfidenceObservation:
     confidence, confidence_status = _confidence_value(row["routing_confidence"])
-    metadata = json.loads(row["metadata"])
-    if isinstance(metadata, dict):
+    metadata = safe_json_object(row["metadata"])
+    if metadata is not None:
         route = _provenance(
             metadata.get("authoritative_route"), {r.value for r in Route}, "invalid-route"
         )

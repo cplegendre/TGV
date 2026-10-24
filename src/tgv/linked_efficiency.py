@@ -19,7 +19,7 @@ from tgv.models import (
     Route,
     TerMeasurement,
 )
-from tgv.outcomes import OutcomeLedger, TerMeasurementRequest
+from tgv.outcomes import LedgerDiagnostics, OutcomeLedger, TerMeasurementRequest
 from tgv.session_linking import ValidatedSession, validate_agent_session
 
 
@@ -61,6 +61,8 @@ def _load_linked_ledger(ledger: OutcomeLedger, repository_root: Path) -> _Linked
     tasks_by_id = {task.task_id: task for task in tasks}
     expected_repository_id = ledger.repository_id(repository_root)
     links: list[tuple[OutcomeTask, ExecutionAttempt, AgentSessionLink]] = []
+    diagnostics = ledger.diagnostics
+    quarantined_tasks = diagnostics.quarantined_task_ids if diagnostics is not None else set()
 
     for task in tasks:
         if task.repository_id != expected_repository_id:
@@ -68,7 +70,12 @@ def _load_linked_ledger(ledger: OutcomeLedger, repository_root: Path) -> _Linked
                 f"Outcome task {task.task_id} belongs to a different repository"
             )
 
+    attempts: list[ExecutionAttempt] = []
     for attempt in ledger.all_execution_attempts():
+        if attempt.task_id in quarantined_tasks:
+            if diagnostics is not None:
+                diagnostics.excluded_attempts += 1
+            continue
         attempt_task = tasks_by_id.get(attempt.task_id)
         if attempt_task is None:
             raise LinkedEfficiencyError(
@@ -78,6 +85,7 @@ def _load_linked_ledger(ledger: OutcomeLedger, repository_root: Path) -> _Linked
             raise LinkedEfficiencyError(
                 f"Execution attempt {attempt.attempt_id} does not match its outcome task"
             )
+        attempts.append(attempt)
         for link in ledger.agent_sessions(attempt.attempt_id):
             if link.attempt_id != attempt.attempt_id:
                 raise LinkedEfficiencyError(
@@ -85,7 +93,6 @@ def _load_linked_ledger(ledger: OutcomeLedger, repository_root: Path) -> _Linked
                 )
             links.append((attempt_task, attempt, link))
 
-    attempts = ledger.all_execution_attempts()
     return _LinkedLedger(tasks=tasks, attempts=attempts, links=links)
 
 
@@ -312,7 +319,22 @@ def _group(
 
 
 def linked_measurement_report(ledger: OutcomeLedger, repository_root: Path) -> dict[str, Any]:
-    """Aggregate persisted real-session measurements and verified outcomes."""
+    """Aggregate persisted real-session measurements and verified outcomes.
+
+    The report never creates or migrates the ledger, even when given a writable
+    ``OutcomeLedger`` instance.
+    """
+    if not ledger.path.is_file():
+        return _empty_linked_report(ledger.repository_id(repository_root))
+    with ledger.evidence_read() as diagnostics:
+        return _linked_measurement_report(ledger, repository_root, diagnostics)
+
+
+def _linked_measurement_report(
+    ledger: OutcomeLedger,
+    repository_root: Path,
+    diagnostics: LedgerDiagnostics,
+) -> dict[str, Any]:
     linked_ledger = _load_linked_ledger(ledger, repository_root)
     links_by_id = {
         link.session_link_id: (task, attempt, link) for task, attempt, link in linked_ledger.links
@@ -334,6 +356,9 @@ def linked_measurement_report(ledger: OutcomeLedger, repository_root: Path) -> d
                 continue
             measurement_link = links_by_id.get(measurement.session_link_id)
             if measurement_link is None:
+                if measurement.session_link_id in diagnostics.quarantined_session_link_ids:
+                    diagnostics.excluded_measurements += 1
+                    continue
                 raise LinkedEfficiencyError(
                     f"Measurement {measurement.measurement_id} has an invalid session association"
                 )
@@ -408,7 +433,7 @@ def linked_measurement_report(ledger: OutcomeLedger, repository_root: Path) -> d
     )
 
     missing_or_invalid_measurements = len(linked_ledger.links) - len(valid_measurement_links)
-    overall = {
+    overall: dict[str, Any] = {
         "total_tasks": len(linked_ledger.tasks),
         "linked_tasks": len(linked_task_ids),
         "successfully_measured_sessions": len(valid_measurement_links),
@@ -426,9 +451,11 @@ def linked_measurement_report(ledger: OutcomeLedger, repository_root: Path) -> d
         **_aggregate(aggregate_entries),
     }
     overall["measured_tasks"] = len(measured_task_ids)
+    overall["invalid_records"] = diagnostics.to_dict()
 
     return {
         "source": "linked-ter",
+        "status": "empty" if not linked_ledger.tasks else "observational",
         "overall": overall,
         "aggregates": {
             "by_route": _group(
@@ -448,4 +475,35 @@ def linked_measurement_report(ledger: OutcomeLedger, repository_root: Path) -> d
             ),
         },
         "measurements": raw_measurements,
+    }
+
+
+def _empty_linked_report(repository_id: str) -> dict[str, Any]:
+    """Documented empty result for a repository with no outcome ledger."""
+    return {
+        "source": "linked-ter",
+        "status": "empty",
+        "overall": {
+            "total_tasks": 0,
+            "linked_tasks": 0,
+            "successfully_measured_sessions": 0,
+            "raw_measurement_count": 0,
+            "superseded_measurements": 0,
+            "verified_outcome_tasks": 0,
+            "verified_success_tasks": 0,
+            "verified_failure_tasks": 0,
+            "unverified_outcome_tasks": 0,
+            "invalid_measurements": 0,
+            "missing_or_invalid_measurements": 0,
+            "linked_sessions_without_path": 0,
+            "measured_tasks": 0,
+            "invalid_records": LedgerDiagnostics().to_dict(),
+            **_aggregate([]),
+        },
+        "aggregates": {
+            "by_route": {},
+            "by_model": {},
+            "by_capability_tier": {},
+        },
+        "measurements": [],
     }

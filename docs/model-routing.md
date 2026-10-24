@@ -118,6 +118,12 @@ level, so a measured attempt need not be the attempt that ultimately succeeded. 
 invalid measurement counts include excluded populations and unattributed measurements;
 per-target counts cover invalid measurements attached to that target's eligible sessions.
 
+Evidence mode reads the ledger read-only and never creates or migrates it. Records that cannot be
+decoded are quarantined with their dependent attempts, sessions, and measurements; they are
+excluded from every denominator and counted under `coverage.invalid_records`, never as verified
+successes or failures. A `metadata` value that is not a JSON object is treated as unavailable
+provenance and counted. An unsupported schema version fails with a controlled error.
+
 Verification coverage, missing measurements, selection bias, task difficulty, model
 selection, and historical policy changes limit interpretation. Wilson intervals describe
 observed verified outcomes; they do not remove these biases. TER efficiency is separate
