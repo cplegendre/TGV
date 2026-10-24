@@ -1129,6 +1129,23 @@ class OutcomeLedger:
             [record.model_dump(mode="json") for record in selected], indent=2, sort_keys=True
         )
 
+    def confidence_records(self, repository_id: str) -> list[dict[str, Any]]:
+        """Read one raw projection per task without coercing historical confidence.
+
+        Always use the existing read-only connection, even on a writable ledger object.
+        No attempts, sessions, descriptions, retrieved paths, or routing reasons are read.
+        """
+        with closing(self._connect_read_only()) as connection:
+            rows = connection.execute(
+                "SELECT task_id, timestamp, repository_id, request_hash, task_category, "
+                "routing_confidence, selected_model, selected_capability_tier, "
+                "execution_status, tests_passed, static_checks_passed, human_accepted, "
+                "rework_required, safety_violation, metadata "
+                "FROM outcomes WHERE repository_id = ? ORDER BY task_id",
+                (repository_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def export_csv(self, records: Iterable[OutcomeTask] | None = None) -> str:
         selected = list(records) if records is not None else self.query(limit=10000)
         buffer = io.StringIO()

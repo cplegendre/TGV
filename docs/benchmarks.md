@@ -86,3 +86,96 @@ bias, task difficulty, model-selection confounding, missing measurements, unequa
 coverage, analyzer-version differences, repeated attempts, and the absence of counterfactual
 executions can all affect comparisons. Do not use this report to claim that another routing
 strategy would have performed better on the same tasks.
+
+## Confidence diagnostics
+
+```bash
+tgv confidence --repo .
+tgv confidence --repo . --json
+# Optional configuration, including intelligence.outcome_database_path
+tgv confidence --repo . --config tgv.yaml --json
+```
+
+This command measures observed alignment between persisted routing confidence and verified
+outcomes. It does not execute agents, invoke TER, load session content, create indexes, or
+modify routing/configuration. It uses the same read-only ledger access and schema checks as
+the observational benchmark: missing ledgers produce empty reports, incompatible legacy
+schemas require an explicit upgrade elsewhere, and malformed ledgers produce errors without
+echoing task content. SQLite may create transient WAL coordination sidecars for a live WAL
+database; the command does not change journal mode or permissions. Configured relative
+database paths resolve against `--repo`; absolute paths are used as configured.
+
+### Observation and outcome definitions
+
+One unique outcome task contributes at most once, regardless of attempts or linked sessions.
+Only verified outcomes with finite numeric confidence in [0, 1] are scored. Success is 1 and
+failure is 0, using the existing outcome contract: completed/succeeded tasks need validation,
+human acceptance, or rework evidence; observed negative evidence makes them failures.
+Safety violations count as verified failures even if incomplete. Completion without evidence
+is unverified; other incomplete tasks are excluded from scores. TER is never a prerequisite,
+so verified failures without measurements remain included.
+
+Missing, nonnumeric, nonfinite, out-of-range, and boolean confidence values are rejected
+without clamping or fabrication. Historical SQLite REAL affinity can irreversibly turn
+booleans into numeric 0/1, numeric strings into numbers, and NaN into NULL. Diagnostics validate
+the persisted representation; they cannot recover types already lost by SQLite. Missing and
+invalid confidence remain visible in coverage counts.
+
+### Scores and uncertainty
+
+For the `n` scored tasks, with confidence `p_i` and verified outcome `y_i`:
+
+- **Brier score:** `sum((p_i - y_i)^2) / n`.
+- **Reliability bins:** ten fixed intervals `[0.0, 0.1)`, ..., `[0.9, 1.0]`.
+  Internal boundaries enter the higher bin; 0 enters the first and 1 the last. Each bin
+  reports its count, mean confidence, verified-success frequency, absolute gap, and Wilson
+  95% interval for the success frequency.
+- **Expected calibration error (ECE):** the sum of each bin's absolute gap weighted by
+  `bin_count / n`. Group scores use only that group's observations.
+
+Calculations retain floating-point precision; output is rounded to six decimal places.
+Empty bins have count zero and null statistics. Brier and ECE are null when `n = 0`.
+Wilson intervals use the existing full-precision Wilson score formula with
+`z = 1.959963984540054`. They describe uncertainty in observed success frequencies, not
+uncertainty in Brier/ECE, and do not correct selection bias or dependence between tasks.
+
+### Coverage, groups, and sufficiency
+
+Every overall/group report includes total tasks, verified successes/failures, completed but
+unverified tasks, incomplete tasks, valid/missing/invalid confidence, and scored observations.
+Coverage denominators are explicit:
+
+| Field | Numerator / denominator |
+|---|---|
+| `verification_coverage` | verified tasks / all tasks |
+| `confidence_coverage` | tasks with valid confidence / all tasks |
+| `scoring_coverage` | scored observations / all tasks |
+| `verified_success_rate` | verified successes / all verified tasks, including those without valid confidence |
+
+Undefined ratios are null. Exclusion reasons can overlap; `excluded_tasks` counts unique
+excluded tasks. The overall success interval also uses all verified tasks, while bin
+intervals use only their scored tasks. Evidence is `missing` at zero scored observations,
+`limited` at 1–19, and `sufficient` at 20 or more **for descriptive sample-size reporting
+only**. Scores remain available for small samples; this convention is neither a quality gate
+nor proof of statistical validity.
+
+JSON provides full group-local metrics and bins by authoritative route, selected model,
+capability tier, decision source, task category, and provenance status. Text shows overall
+bins and compact group scores/counts; use JSON for full group coverage and intervals.
+Missing route/source fields use `unavailable`; malformed values use `invalid-route` or
+`invalid-decision-source`. These tasks remain scored when otherwise eligible and are also
+separated by `missing-provenance` or `invalid-provenance`, alongside `attributable` records.
+No route is inferred from a tier. Output is deterministic for identical persisted evidence,
+with sorted groups, fixed bins, no generated identifiers or timestamps, and no individual
+task records, prompts, responses, descriptions, session paths, transcripts, or TER spans.
+
+### Interpretation limits
+
+Routing confidence is heuristic or provider-reported; probability-style scoring is an
+exploratory assumption. Overrides can retain baseline confidence after changing the selected
+route, and pooled scores mix these meanings. See [routing confidence semantics](model-routing.md#routing-confidence-semantics).
+Verification coverage, missing confidence, task difficulty, model selection, policy changes,
+and repeated work under distinct task identifiers can bias results. Different verification
+practices also limit comparisons between groups. Low ECE depends on binning and sample size
+and does not establish optimal routing. Neither these scores nor minimum sample counts
+authorize threshold adjustments, causal group comparisons, or claims of savings.
