@@ -6,8 +6,8 @@ TGV currently supports the **latest published minor line only**. During the `0.x
 
 | Version | Supported |
 |---|---|
-| 0.32 | Yes |
-| < 0.32 | No |
+| 0.39 | Yes |
+| < 0.39 | No |
 
 Users should upgrade before reporting a vulnerability unless the issue prevents upgrading.
 
@@ -17,7 +17,7 @@ Do not open a public issue for a suspected vulnerability. Use GitHub private vul
 
 ## Security posture
 
-TGV 0.32 is not a sandbox, secret scanner, hardened DLP boundary, or authenticated network service. Repository reads are constrained to a configured root and default deny patterns reduce accidental disclosure risk. Normal CLI operation may persist local indexes, telemetry, and outcome metadata under configured paths. MCP runs in an explicit read-only mode and does not persist those artifacts. Operational status, metrics, indexes, telemetry, and generated context bundles use atomic owner-only writes on POSIX-compatible filesystems where supported.
+TGV 0.39 is not a sandbox, secret scanner, hardened DLP boundary, or authenticated network service. Repository reads are constrained to a configured root and default deny patterns reduce accidental disclosure risk. Normal CLI operation may persist local indexes, telemetry, and outcome metadata under configured paths. MCP runs in an explicit read-only mode and does not persist those artifacts. Operational status, metrics, indexes, telemetry, and generated context bundles use atomic owner-only writes on POSIX-compatible filesystems where supported.
 
 TGV does not automatically:
 

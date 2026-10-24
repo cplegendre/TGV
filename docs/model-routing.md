@@ -3,7 +3,7 @@
 For the complete routing-to-TER evidence workflow, see
 [TGV and TER end-to-end workflow](tgv-ter-workflow.md).
 
-TGV 0.32 routes software-engineering requests across four provider-neutral capability profiles:
+TGV 0.39 routes software-engineering requests across four provider-neutral capability profiles:
 
 | Route | Intended workload | Default reasoning budget |
 |---|---|---|
@@ -50,7 +50,7 @@ Parameter count is not used as the primary routing criterion. Model quality, act
 
 ## Execution scope
 
-TGV 0.32 selects profiles and prepares handoffs. Local routing uses the configured Ollama-compatible provider. External execution remains adapter-driven through the existing command handoff interface; provider-specific autonomous execution, retries, tool normalization, and validation loops remain future work.
+TGV 0.39 selects profiles and prepares handoffs. Local routing uses the configured Ollama-compatible provider. External execution remains adapter-driven through the existing command handoff interface; provider-specific autonomous execution, retries, tool normalization, and validation loops remain future work.
 
 ## Evidence-gated threshold calibration
 
@@ -106,8 +106,9 @@ The report separates:
   supported calibration scope. Invalid metrics are excluded and counted; totals must
   match aligned plus waste tokens when supplied. Valid historical measurements without
   totals remain supported. Aggregate TER is token-weighted; waste is waste tokens divided
-  by total tokens. Measured zero-token populations have TER 1.0 and waste 0.0; absent
-  measurements have null TER and null waste.
+  by total tokens. Zero-token populations report null TER, null waste, and
+  `efficiency_status: insufficient-token-evidence`; absent measurements also have null TER
+  and null waste. Zero-token evidence is never treated as perfect efficiency.
 - **Intervention eligibility:** always false for the current historical-only evidence.
   Minimum samples and a passing correctness diagnostic are not proof of causal validity.
 

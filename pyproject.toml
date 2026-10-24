@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tgv-agent"
-version = "0.32"
+version = "0.39"
 description = "Task Gateway and Validator — local first, cloud when necessary."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -91,6 +91,11 @@ warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 module = ["ter_calculator", "ter_calculator.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The MCP SDK is an optional extra; keep type checking usable without it.
+module = ["mcp", "mcp.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

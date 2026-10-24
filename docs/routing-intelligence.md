@@ -75,7 +75,7 @@ The integrated benchmark reports category accuracy, complexity-band accuracy, ac
 
 ## Integrated release benchmark
 
-TGV 0.32 ships 104 curated synthetic cases across all 13 task categories and low/medium/high complexity bands. `tgv benchmark run --enforce --json` applies the release gate used by CI: at least 100 cases, at least 90% task-category accuracy, at least 90% complexity-band accuracy, at least 95% acceptable-route accuracy, and zero false-low-risk cases. The corpus is a regression/evaluation set, not evidence of universal production accuracy.
+TGV 0.39 ships 104 curated synthetic cases across all 13 task categories and low/medium/high complexity bands. `tgv benchmark run --enforce --json` applies the release gate used by CI: at least 100 cases, at least 90% task-category accuracy, at least 90% complexity-band accuracy, at least 95% acceptable-route accuracy, and zero false-low-risk cases. The corpus is a regression/evaluation set, not evidence of universal production accuracy.
 
 
 ## Observed outcome benchmark

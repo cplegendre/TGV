@@ -10,7 +10,7 @@ For the complete linked-session and TER measurement workflow, see
 [Getting started](docs/getting-started.md).
 
 > [!WARNING]
-> Version 0.32 is a production-candidate pre-1.0 release with graceful draining, Prometheus-compatible metrics export, real outcome-ledger evaluation, counterfactual route explanations, private atomic state files, cross-platform worker cancellation, and the CI-enforced 104-case intelligence benchmark. It is not yet a hardened network security boundary.
+> Version 0.39 is a production-candidate pre-1.0 release with graceful draining, Prometheus-compatible metrics export, real outcome-ledger evaluation, counterfactual route explanations, private atomic state files, cross-platform worker cancellation, and the CI-enforced 104-case intelligence benchmark. It is not yet a hardened network security boundary.
 
 ## Try TGV locally
 
@@ -40,9 +40,9 @@ TGV routes by complexity, risk, privacy requirements, expected cost, and availab
 
 ## Supported versions
 
-Only the latest published minor line is supported. During the current `0.x` phase, upgrade to **0.32** for fixes. See [SECURITY.md](SECURITY.md).
+Only the latest published minor line is supported. During the current `0.x` phase, upgrade to **0.39** for fixes. See [SECURITY.md](SECURITY.md).
 
-## v0.32 capabilities
+## v0.39 capabilities
 
 - Four explainable routing profiles: `local_fast`, `local_code`, `frontier_standard`, and `frontier_deep`.
 - Provider-neutral reasoning budgets: `minimal`, `standard`, and `high`.
@@ -160,7 +160,7 @@ Example Claude-style registration:
 }
 ```
 
-The v0.32 server exposes read-only tools:
+The v0.39 server exposes read-only tools:
 
 - `list_repository_files`
 - `search_repository`
@@ -202,8 +202,9 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTI
 ## Measuring routing efficiency
 
 TGV integrates optionally with [TER](https://github.com/cplegendre/TER), the Token
-Efficiency Ratio analyzer for agent-session JSONL. TGV currently links and validates the Claude
-Code JSONL format. The integration answers a practical
+Efficiency Ratio analyzer for agent-session JSONL. TGV currently links and validates Claude Code
+JSONL and Codex `rollout-*.jsonl` formats. Only Claude Code is supported for TER scoring; Codex
+linking fails closed until a TER Codex loader is available. The integration answers a practical
 question: are TGV's `local_fast`, `local_code`, `frontier_standard`, and `frontier_deep` routing decisions producing
 efficient agent sessions, or are some routes accumulating avoidable token waste?
 
@@ -257,6 +258,10 @@ TER, aligned tokens, waste tokens, and session count. Higher TER indicates a lar
 of scored tokens aligned with the request; the waste-token count identifies the volume of
 scored output TER classified as avoidable.
 
+Zero-token evidence is never reported as perfect efficiency. Legacy and linked reports
+emit `aggregate_ter: null` with `efficiency_status: insufficient-token-evidence` when a
+route or scope has no accounted tokens.
+
 ### Calibrate routing thresholds
 
 `tgv calibrate` applies a deliberately simple, explainable heuristic to the efficiency
@@ -266,8 +271,8 @@ report. It is a dry run unless `--apply` is supplied:
 # Dry run using the defaults
 tgv calibrate --sessions .tgv/sessions --config tgv.yaml
 
-# Review and then write proposed thresholds
-tgv calibrate --sessions .tgv/sessions --config tgv.yaml --apply
+# Review and then write proposed thresholds (explicit legacy acknowledgement)
+tgv calibrate --sessions .tgv/sessions --config tgv.yaml --apply --accept-legacy-heuristic
 ```
 
 The tuning controls are:
@@ -280,7 +285,8 @@ The legacy session heuristic proposes raising a threshold when observed waste ex
 the target and lowering it when waste is low and volume is sufficient. These thresholds
 control model-suggestion acceptance; rejected suggestions fall back to deterministic
 routing, which may still select a local route. The heuristic does not establish a
-correctness or efficiency benefit. Routes below the minimum session count are unchanged.
+correctness or efficiency benefit. Routes below the minimum session count are unchanged,
+and zero-token routes are treated as insufficient evidence rather than low waste.
 
 `--apply` rewrites the selected YAML file from TGV's validated configuration model. The
 result remains semantically equivalent, but comments and key ordering may change.
@@ -354,7 +360,7 @@ Repository search uses a bounded incremental lexical/AST index. Ignored director
 
 When `tgv calibrate --apply` writes YAML, it serializes the validated configuration model. Key order and comments may therefore change. Dry-run remains the default.
 
-## 0.32 operational readiness
+## 0.39 operational readiness
 
 Run the stdio gateway with heartbeat status and privacy-minimal diagnostics:
 
@@ -420,7 +426,7 @@ routing weights. No behavioral changes; all 62+ tests still pass at 99% coverage
 
 ## Routing Intelligence and Evaluation
 
-TGV 0.32 uses two-stage task profiling, bounded lexical/structural retrieval, a privacy-minimal SQLite outcome ledger, and a statistically guarded model-routing scoreboard. Historical recommendations are scoped to the current repository, activate only after the configured minimum sample count, and now expose/apply the recommended model in the route execution plan. Unverified completed outcomes are not treated as successful evidence. Mandatory safety escalation always wins.
+TGV 0.39 uses two-stage task profiling, bounded lexical/structural retrieval, a privacy-minimal SQLite outcome ledger, and a statistically guarded model-routing scoreboard. Historical recommendations are scoped to the current repository, activate only after the configured minimum sample count, and now expose/apply the recommended model in the route execution plan. Unverified completed outcomes are not treated as successful evidence. Mandatory safety escalation always wins.
 
 ```bash
 tgv profile "Fix refresh-token rotation" --repo . --json
@@ -435,3 +441,14 @@ tgv benchmark outcomes --repo . --json
 ```
 
 See `docs/routing-intelligence.md` for formulas, privacy behavior, architecture, limitations, and configuration.
+
+
+## v0.39 Phase 3 maintenance
+
+To refresh a continued but **unmeasured** agent session without creating a new attempt, use `tgv outcomes link TASK_ID --repo . --agent claude-code --session PATH --attempt ATTEMPT_ID --replace-unmeasured`. Session identity must remain unchanged, and measured sessions cannot be replaced.
+
+To request exploratory (not causal) uncertainty for confidence scores, use `tgv confidence --repo . --json --bootstrap-samples 1000`. The default remains unchanged. Pooled confidence sources remain heterogeneous; consult grouped results.
+
+Legacy `tgv calibrate --apply` requires explicit `--accept-legacy-heuristic` because this path can alter routing thresholds without verified outcomes; prefer `calibrate --evidence` for evidence inspection. See `PHASE3_IMPLEMENTATION.md` for limitations.
+
+**Integration status:** Claude Code TER 3.0.0 CLI remains the supported scoring workflow. Codex session linking does not mean Codex TER scoring is implemented. `efficiency --linked` may write TER measurements; `report --linked` and `confidence` are inspection-only. Python >=3.11 is supported for core TGV, but the TER extra is limited by upstream dependencies.

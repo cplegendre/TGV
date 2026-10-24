@@ -6,7 +6,7 @@ import re
 import shutil
 import subprocess
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +24,7 @@ class TERAnalysisError(TGVError):
 
 DEFAULT_TER_TIMEOUT_SECONDS = 300.0
 SUPPORTED_TER_VERSION = "3.0.0"
+SUPPORTED_TER_SCHEMA_VERSION = 1
 _MAX_ERROR_EXCERPT = 500
 
 
@@ -47,6 +48,7 @@ class TERAnalysis:
     analyzer: str
     analyzer_version: str
     total_tokens: int | None = None
+    schema_version: int | None = None
 
 
 def validate_ter_analysis(analysis: TERAnalysis) -> None:
@@ -122,6 +124,21 @@ def _parse_ter_payload(stdout: str, path: Path, analyzer_version: str) -> TERAna
         raise TERAnalysisError(f"TER returned invalid JSON for {path}: {exc.msg}") from exc
     if not isinstance(payload, dict):
         raise TERAnalysisError(f"TER returned a non-object JSON payload for {path}")
+    schema_version = payload.get("schema_version")
+    if schema_version is not None and (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or schema_version != SUPPORTED_TER_SCHEMA_VERSION
+    ):
+        raise TERAnalysisError(
+            f"Unsupported TER output schema_version {schema_version!r}; "
+            f"expected {SUPPORTED_TER_SCHEMA_VERSION}"
+        )
+    if schema_version is None and analyzer_version != SUPPORTED_TER_VERSION:
+        raise TERAnalysisError(
+            "Unsupported TER CLI version: output has no schema_version; only legacy TER 3.0.0 "
+            "CLI is compatible with unversioned output"
+        )
     total_tokens = payload.get("total_tokens")
     if total_tokens is not None:
         total_tokens = _required_nonnegative_int(payload, "total_tokens")
@@ -133,6 +150,7 @@ def _parse_ter_payload(stdout: str, path: Path, analyzer_version: str) -> TERAna
         analyzer="TER CLI",
         total_tokens=total_tokens,
         analyzer_version=analyzer_version,
+        schema_version=schema_version,
     )
     validate_ter_analysis(analysis)
     return analysis
@@ -154,9 +172,7 @@ def _detect_ter_version(executable: str, timeout: float) -> str:
             "TER CLI executable was not found. Install it with: pip install 'tgv-agent[ter]'"
         ) from exc
     except subprocess.TimeoutExpired as exc:
-        raise TERAnalysisError(
-            f"TER version check timed out after {timeout:g} seconds"
-        ) from exc
+        raise TERAnalysisError(f"TER version check timed out after {timeout:g} seconds") from exc
     except OSError as exc:
         raise TERAnalysisError(f"TER version check could not start: {exc}") from exc
     if completed.returncode != 0:
@@ -167,13 +183,14 @@ def _detect_ter_version(executable: str, timeout: float) -> str:
     output = (completed.stdout or completed.stderr).strip()
     match = re.search(r"(?:^|\s)(\d+\.\d+\.\d+)(?:\s|$)", output)
     if match is None:
-        raise TERAnalysisError(
-            f"TER version output was unrecognized: {_bounded_excerpt(output)}"
-        )
+        raise TERAnalysisError(f"TER version output was unrecognized: {_bounded_excerpt(output)}")
     version = match.group(1)
-    if version != SUPPORTED_TER_VERSION:
+    # Newer TER 3 releases may be consumed only when their output advertises
+    # a compatible schema_version. Unversioned output remains pinned to 3.0.0.
+    if version.split(".")[0] != "3" or tuple(map(int, version.split("."))) < (3, 0, 0):
         raise TERAnalysisError(
-            f"Unsupported TER CLI version {version}; TGV requires TER {SUPPORTED_TER_VERSION}"
+            f"Unsupported TER CLI version {version}; expected TER 3.x with "
+            "a compatible analysis JSON contract"
         )
     return version
 
@@ -258,12 +275,14 @@ def score_sessions(
     ]
 
 
-def aggregate_by_route(sessions: list[ScoredSession]) -> dict[str, dict[str, int | float]]:
+def aggregate_by_route(
+    sessions: list[ScoredSession],
+) -> dict[str, dict[str, int | float | str | None]]:
     grouped: dict[str, list[ScoredSession]] = defaultdict(list)
     for session in sessions:
         grouped[session.route].append(session)
 
-    report: dict[str, dict[str, int | float]] = {}
+    report: dict[str, dict[str, int | float | str | None]] = {}
     for route, items in sorted(grouped.items()):
         aligned = sum(item.aligned_tokens for item in items)
         waste = sum(item.waste_tokens for item in items)
@@ -272,10 +291,11 @@ def aggregate_by_route(sessions: list[ScoredSession]) -> dict[str, dict[str, int
             sum(item.aggregate_ter * (item.aligned_tokens + item.waste_tokens) for item in items)
             / total
             if total
-            else 1.0
+            else None
         )
         report[route] = {
-            "aggregate_ter": round(weighted_ter, 4),
+            "aggregate_ter": round(weighted_ter, 4) if weighted_ter is not None else None,
+            "efficiency_status": "measured" if total else "insufficient-token-evidence",
             "aligned_tokens": aligned,
             "waste_tokens": waste,
             "session_count": len(items),
@@ -295,15 +315,21 @@ class CalibrationProposal:
     justification: str
 
 
-def waste_ratio(metrics: dict[str, int | float]) -> float:
-    aligned = int(metrics["aligned_tokens"])
-    waste = int(metrics["waste_tokens"])
+def _metric_int(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return int(value)
+
+
+def waste_ratio(metrics: Mapping[str, object]) -> float:
+    aligned = _metric_int(metrics.get("aligned_tokens"))
+    waste = _metric_int(metrics.get("waste_tokens"))
     total = aligned + waste
     return waste / total if total else 0.0
 
 
 def propose_thresholds(
-    report: dict[str, dict[str, int | float]],
+    report: dict[str, dict[str, int | float | str | None]],
     *,
     local_answer_confidence: float,
     local_code_confidence: float,
@@ -318,7 +344,7 @@ def propose_thresholds(
     proposals: list[CalibrationProposal] = []
     for route, (name, current) in routes.items():
         metrics = report.get(route, {})
-        count = int(metrics.get("session_count", 0))
+        count = _metric_int(metrics.get("session_count"))
         ratio = waste_ratio(metrics) if metrics else 0.0
         if count < minimum_sessions:
             proposals.append(
@@ -333,6 +359,26 @@ def propose_thresholds(
                     (
                         f"{count} sessions is below the minimum of {minimum_sessions}; "
                         "no change proposed."
+                    ),
+                )
+            )
+            continue
+        if (
+            _metric_int(metrics.get("aligned_tokens")) + _metric_int(metrics.get("waste_tokens"))
+            == 0
+        ):
+            proposals.append(
+                CalibrationProposal(
+                    route,
+                    name,
+                    current,
+                    current,
+                    ratio,
+                    count,
+                    "insufficient_data",
+                    (
+                        f"{count} sessions contain no accounted tokens; zero-token evidence "
+                        "cannot justify a threshold change."
                     ),
                 )
             )

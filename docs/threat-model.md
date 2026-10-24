@@ -27,7 +27,7 @@ Large files, broad searches, repeated requests, noisy subprocesses, and large ig
 
 ### Local state disclosure and partial writes
 
-Operational state can reveal repository paths, route choices, model identifiers, or task metadata even when source contents are excluded. TGV 0.32 writes status, Prometheus metrics, repository indexes, telemetry files, and context bundles atomically and uses owner-only permissions on POSIX-compatible filesystems where supported. Operators should still protect the `.tgv` directory and any configured external state paths.
+Operational state can reveal repository paths, route choices, model identifiers, or task metadata even when source contents are excluded. TGV 0.39 writes status, Prometheus metrics, repository indexes, telemetry files, and context bundles atomically and uses owner-only permissions on POSIX-compatible filesystems where supported. Operators should still protect the `.tgv` directory and any configured external state paths.
 
 ### Outcome-store concurrency
 
@@ -51,7 +51,7 @@ Session files are opened by descriptor with `O_NOFOLLOW` where supported, and `f
 
 ### Malicious MCP clients
 
-The v0.32 MCP surface is read-only. It does not expose shell execution or repository-source writes, and MCP service mode suppresses index, outcome, and telemetry persistence. Deployments should use stdio for single-user local use and authenticate any future network transport.
+The v0.39 MCP surface is read-only. It does not expose shell execution or repository-source writes, and MCP service mode suppresses index, outcome, and telemetry persistence. Deployments should use stdio for single-user local use and authenticate any future network transport.
 
 ## Out of scope
 

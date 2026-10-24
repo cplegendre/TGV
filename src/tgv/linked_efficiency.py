@@ -141,6 +141,8 @@ def _analysis_snapshot(validated: ValidatedSession) -> Iterator[Path]:
 
 def _validate_analysis(analysis: TERAnalysis, link: AgentSessionLink) -> None:
     validate_ter_analysis(analysis)
+    if analysis.aligned_tokens + analysis.waste_tokens == 0:
+        raise LinkedEfficiencyError("TER analysis has insufficient token evidence (zero tokens)")
     if analysis.session_id != link.external_session_id:
         raise LinkedEfficiencyError(
             f"TER session identity does not match session link {link.session_link_id}"
@@ -159,6 +161,11 @@ def measure_linked_sessions(
     resolved_analyzer = analyzer
     for task, attempt, link in linked_ledger.links:
         validated = _validate_linked_session(task, attempt, link)
+        if link.agent == "codex" and analyzer is None:
+            raise LinkedEfficiencyError(
+                "Codex scoring requires a TER release with a validated Codex loader; "
+                "the bundled TER 3.0.0 analyzer does not support Codex"
+            )
         with _analysis_snapshot(validated) as snapshot_path:
             if resolved_analyzer is None:
                 resolved_analyzer = ter_analyzer()
@@ -284,16 +291,17 @@ def _measurement_view(
     )
 
 
-def _aggregate(entries: list[_MeasurementView]) -> dict[str, int | float]:
+def _aggregate(entries: list[_MeasurementView]) -> dict[str, int | float | str | None]:
     total_tokens = sum(entry.total_tokens for entry in entries)
     weighted_ter = (
         sum(entry.aggregate_ter * entry.total_tokens for entry in entries) / total_tokens
         if total_tokens
-        else 1.0
+        else None
     )
     task_ids = {entry.task.task_id for entry in entries}
     return {
-        "aggregate_ter": round(weighted_ter, 4),
+        "aggregate_ter": round(weighted_ter, 4) if weighted_ter is not None else None,
+        "efficiency_status": "measured" if total_tokens else "insufficient-token-evidence",
         "aligned_tokens": sum(entry.aligned_tokens for entry in entries),
         "waste_tokens": sum(entry.waste_tokens for entry in entries),
         "total_tokens": total_tokens,
@@ -311,7 +319,7 @@ def _aggregate(entries: list[_MeasurementView]) -> dict[str, int | float]:
 
 def _group(
     entries: list[_MeasurementView], key: Callable[[_MeasurementView], str]
-) -> dict[str, dict[str, int | float]]:
+) -> dict[str, dict[str, Any]]:
     grouped: dict[str, list[_MeasurementView]] = {}
     for entry in entries:
         grouped.setdefault(key(entry), []).append(entry)
@@ -387,9 +395,7 @@ def _linked_measurement_report(
     verified = [_outcome_success(task) for task in linked_ledger.tasks]
     verified_values = [value for value in verified if value is not None]
     aggregate_entries = _canonical_entries(entries)
-    selected_measurement_ids = {
-        entry.measurement.measurement_id for entry in aggregate_entries
-    }
+    selected_measurement_ids = {entry.measurement.measurement_id for entry in aggregate_entries}
 
     raw_measurements = [
         {
@@ -411,9 +417,7 @@ def _linked_measurement_report(
             "task_category": entry.task.task_category.value,
             "routing_confidence": entry.task.routing_confidence,
             "outcome_verification": _outcome_status(entry.task),
-            "aggregate_selected": (
-                entry.measurement.measurement_id in selected_measurement_ids
-            ),
+            "aggregate_selected": (entry.measurement.measurement_id in selected_measurement_ids),
             "metrics": {
                 "aggregate_ter": entry.aggregate_ter,
                 "aligned_tokens": entry.aligned_tokens,
@@ -458,9 +462,7 @@ def _linked_measurement_report(
         "status": "empty" if not linked_ledger.tasks else "observational",
         "overall": overall,
         "aggregates": {
-            "by_route": _group(
-                aggregate_entries, lambda entry: _route_for_task(entry.task)
-            ),
+            "by_route": _group(aggregate_entries, lambda entry: _route_for_task(entry.task)),
             "by_model": _group(
                 aggregate_entries,
                 lambda entry: entry.task.selected_model or "unassigned",

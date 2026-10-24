@@ -1,7 +1,7 @@
 # TGV and TER end-to-end workflow
 
 This is the canonical guide for using TGV routing evidence with
-[TER](https://github.com/cplegendre/TER) execution measurements. It applies to TGV 0.32 and
+[TER](https://github.com/cplegendre/TER) execution measurements. It applies to TGV 0.39 and
 the pinned TER CLI 3.0.0 contract. TER is optional: routing, context preparation, outcome
 persistence, and confidence diagnostics work without it.
 
@@ -90,8 +90,10 @@ Verify the executable on `PATH`:
 ter --version
 ```
 
-TGV requires the parsed version to be exactly `3.0.0`. Missing executables, unparseable
-versions, non-3.0.0 versions, invalid JSON, and analysis failures are reported as TGV errors.
+TGV accepts unversioned JSON only from TER `3.0.0`. Newer TER 3.x builds are accepted only
+when their JSON declares `schema_version: 1`. TER versions below `3.0.0`, TER 4+, unsupported
+schema versions, unparseable versions, invalid JSON, and analysis failures are reported as TGV
+errors.
 The first analysis may download an embedding model. For offline use, pre-cache the model
 according to TER's documentation and do not assume TGV performs that download for you.
 
@@ -156,7 +158,7 @@ step.
 
 ## 6. Link the real session to the outcome task
 
-Only Claude Code JSONL is currently validated for linking:
+Claude Code JSONL sessions can be linked as follows:
 
 ```bash
 tgv outcomes link "$TASK_ID" \
@@ -168,8 +170,10 @@ tgv outcomes link "$TASK_ID" \
 The session must contain a consistent `sessionId`, at least one `user` record, and at least one
 `assistant` record. TGV rejects missing files, directories, final-component symlinks,
 non-regular files, oversized files, malformed records, repository mismatches, and conflicting
-or changed links. Codex transcript files are not supported because no stable documented file
-schema is available.
+or changed links. Codex JSONL rollout linking is available with `--agent codex`; this
+validates the format and identity, but **does not enable TER scoring for Codex**. The pinned
+TER 3.0.0 analyzer has no verified Codex loader. Never interpret a Codex link as a valid
+TER efficiency measurement.
 
 Linking validates and fingerprints the file but does not invoke TER. TGV does not scan home
 directories or discover sessions automatically.
@@ -201,9 +205,9 @@ human rejection or required rework also makes it a failure. A completed task wit
 remains **unverified**, and an incomplete task is excluded from verified-success rates. Linking a
 session alone never makes a task successful.
 
-Task outcome status and execution-attempt status are separate fields. `tgv outcomes complete`
-updates the task outcome; it does not close the linked execution attempt. A pending attempt count in
-the observational report therefore does not by itself mean the task is unverified.
+Task outcome status and execution-attempt status are separate fields. New completions close
+associated pending attempts; historical ledger entries can still retain legacy pending states.
+Review older attempts separately rather than assuming a pending count represents active work.
 
 ## 8. Analyze execution efficiency with TER
 
@@ -245,8 +249,9 @@ superseded records but do not count twice.
 
 ### Invalid and unreadable records
 
-The read-only evidence reports (`report --linked`, `benchmark observed`, `calibrate --evidence`,
-and `confidence`) never emit a traceback or raw persisted values for malformed data:
+The read-only evidence commands (`report --linked`, `outcomes list`, `outcomes export`,
+`benchmark observed`, `calibrate --evidence`, and `confidence`) never create or migrate the
+ledger and never emit a traceback or raw persisted values for malformed data:
 
 - A `metadata` value that is not a JSON object is treated as `{}`, counted as
   `invalid_metadata_tasks`, and listed under `invalid_records`. Provenance derived from it becomes
@@ -420,22 +425,25 @@ deletion, or vacuum policy; protect and manage `.tgv` according to your data-han
 ## TER compatibility and supported interface
 
 - **Package:** `ter-calculator[embeddings]` pinned to TER Git tag `v3.0.0`.
-- **Executable:** `ter` must be on `PATH`; `ter --version` must report exactly `3.0.0`.
+- **Executable:** `ter` must be on `PATH`. Unversioned JSON output is supported only from
+  legacy TER `3.0.0`; versioned JSON output requires supported `schema_version: 1` and a
+  compatible TER 3.x analyzer version.
 - **Analysis command:** `ter analyze <session.jsonl> --format json`.
 - **Required JSON fields:** `session_id`, `aggregate_ter`, `aligned_tokens`, and `waste_tokens`.
   `total_tokens` is optional; when supplied it must equal aligned plus waste tokens.
 - **Tolerated data:** additional fields such as `classified_spans` are ignored by TGV's adapter.
-- **Validation:** TER errors, invalid JSON, version mismatches, session identity mismatches,
+- **Validation:** TER errors, invalid JSON, unsupported schema/version combinations, session identity mismatches,
   out-of-range values, and inconsistent totals are rejected with a TGV error.
 
 TER manuscript tags `v4` and `v5` are not verified TER package releases for this integration.
 Do not claim compatibility with a TER release unless the pinned contract and a real analysis have
-been tested. Only `claude-code` sessions are currently supported for linking; Codex is not.
+been tested. Both `claude-code` and `codex` may be linked, but only Claude Code is supported by
+the pinned TER 3.0.0 scoring workflow. TER-side Codex loader work remains outstanding.
 
 ## Remaining limitations
 
 - Linking is manual; TGV does not capture external agent sessions.
-- Only the Claude Code JSONL format is supported.
+- Claude Code is the only supported TER 3.0.0 scoring format; Codex linking alone is not scoring.
 - A linked session is evidence for one attempt; it is not a controlled experiment.
 - The outcome ledger is local and has no built-in retention policy.
 - Confidence calibration and evidence-gated calibration are read-only diagnostics with descriptive

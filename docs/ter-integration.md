@@ -1,4 +1,4 @@
-# TER integration contract (TGV 0.32)
+# TER integration contract (TGV 0.39)
 
 TGV optionally runs [TER](https://github.com/cplegendre/TER) as a separate process to
 analyze session JSONL files. The supported, repository-verified TER package is
@@ -108,10 +108,10 @@ compares its external session identity and SHA-256 fingerprint with the stored l
 exact validated bytes to an owner-only temporary snapshot, and invokes the TER CLI against that
 snapshot. The snapshot is removed after success or failure, so later path replacement or in-place
 changes cannot alter the analyzed content. TGV also verifies the TER executable version through
-the public `ter --version` interface, requires TER 3.0.0, compares the `session_id` returned by
-TER with the linked session, and rejects out-of-range or internally inconsistent aggregate token
-metrics. It persists only aggregate TER metrics in `ter_measurements`. It never scores TGV's
-synthetic telemetry.
+the public `ter --version` interface, accepts legacy TER 3.0.0 output or newer TER 3.x output
+declaring `schema_version: 1`, compares the `session_id` returned by TER with the linked session,
+and rejects out-of-range or internally inconsistent aggregate token metrics. It persists only
+aggregate TER metrics in `ter_measurements`. It never scores TGV's synthetic telemetry.
 
 All linked sessions are validated and analyzed before measurements are committed in one SQLite
 transaction. A TER failure or measurement conflict therefore rolls back the batch. Re-running an
@@ -144,10 +144,12 @@ uses only the most recent valid measurement and marks earlier measurements as su
 raw record list. Ties are broken by measurement identifier. This prevents multiple analyzer
 versions from counting the same session more than once.
 
-Codex exposes a current session identifier through hooks and a transcript path, but official
-OpenAI documentation does not define a stable transcript-file schema. TGV therefore does not
-validate or link Codex transcript files yet. Adding a future format requires a documented schema
-and agent-specific validation tests.
+Codex exposes a current session identifier through hooks and a transcript path. TGV validates and
+links the observed `rollout-*.jsonl` envelope when it contains a stable `session_meta` identity and
+meaningful user and assistant text. This is a link-only capability: the pinned TER 3.0.0 analyzer
+has no verified Codex loader, so linked Codex measurement fails closed with an actionable error
+instead of persisting a misleading zero-token result. A TER-side Codex loader and producer contract
+are prerequisites for Codex efficiency scoring.
 
 ## Record user-attested validation evidence
 
@@ -192,7 +194,7 @@ keeps only aggregate values and does not need detailed span content.
 
 ## Scope
 
-This integration documents the pinned TER 3.0.0 CLI contract, optional
+This integration documents the pinned TER 3.x CLI contract, optional
 installation requirements, metadata-only session linking, validation evidence,
 and linked TER measurement. It does not run TER during linking, update routing
 algorithms, or support an unverified TER 4 API.

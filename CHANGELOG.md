@@ -1,3 +1,28 @@
+## [0.39] - 2026-10-25
+
+- PR-16: explicit `outcomes link --replace-unmeasured --attempt` refreshes session content and locator atomically while preserving link identity; scored sessions cannot be replaced.
+- PR-17: documentation and version metadata updated; release limitations clarified.
+- PR-18: optional deterministic task bootstrap intervals for confidence Brier and ECE (off by default).
+- PR-19: legacy `calibrate --apply` now requires `--accept-legacy-heuristic`; verified evidence calibration unchanged.
+- Review: legacy zero-token route aggregation now reports null TER and cannot lower confidence thresholds.
+- Review: `outcomes list` and `outcomes export` are read-only and no longer create an empty ledger.
+- Review: text reports render unavailable zero-token TER as `n/a` instead of failing formatting.
+- Review: Codex session linking and session-replacement guard coverage expanded; packaging check now
+  evaluates the prospective archive file set and supports `--root`.
+
+## [0.38] - 2026-10-25
+
+- Phase 2: versioned TER analysis JSON contract (schema_version=1), maintaining legacy TER 3.0.0 unversioned compatibility.
+- Codex rollout session linking with structural, identity, and nonempty-content checks; Codex scoring fails closed until a compatible TER loader is supplied.
+- Explicit compatibility constraints and regression tests.
+
+## [0.36] - 2026-10-24
+
+- PR-12: read-only reporting and safe evidence record decoding (included in source snapshot).
+- PR-10: nonempty Claude text validation, zero-token TER rejection, and explicit-attempt duplicate-link prevention.
+- PR-11: CLI completion closes pending attempts, without overwriting explicit terminal statuses.
+- Zero-token aggregates report `null` and `insufficient-token-evidence` rather than perfect efficiency.
+
 ## [0.32] - 2026-08-26
 
 ### Added

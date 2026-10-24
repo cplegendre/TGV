@@ -26,6 +26,7 @@ from tgv.efficiency import (
 from tgv.exceptions import (
     CommandExecutionError,
     ConfigurationError,
+    LedgerReadError,
     ProviderUnavailableError,
     RepositoryAccessError,
     TGVError,
@@ -128,6 +129,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     calibrate = sub.add_parser("calibrate", help="Propose routing thresholds from TER results")
     calibrate.add_argument("--evidence", action="store_true")
+    calibrate.add_argument(
+        "--accept-legacy-heuristic",
+        action="store_true",
+        help="Acknowledge legacy threshold changes are not correctness-gated",
+    )
     calibrate.add_argument("--repo", type=_path)
     calibrate.add_argument("--sessions", type=_path)
     calibrate.add_argument("--config", type=_path)
@@ -148,6 +154,12 @@ def build_parser() -> argparse.ArgumentParser:
     confidence.add_argument("--repo", type=_path, default=Path.cwd())
     confidence.add_argument("--config", type=_path)
     confidence.add_argument("--json", action="store_true")
+    confidence.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=0,
+        help="Optional deterministic percentile intervals for Brier/ECE (no default change)",
+    )
 
     bench = sub.add_parser("bench", help="Run deterministic routing or index diagnostics")
     bench_sub = bench.add_subparsers(dest="benchmark", required=True)
@@ -189,6 +201,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Agent-session format of --session",
     )
     outcomes.add_argument("--attempt", help="Existing execution attempt id to link the session to")
+    outcomes.add_argument(
+        "--replace-unmeasured",
+        action="store_true",
+        help=(
+            "Explicitly refresh an unmeasured link (requires --attempt); "
+            "measured links are immutable"
+        ),
+    )
     tests = outcomes.add_mutually_exclusive_group()
     tests.add_argument(
         "--tests-passed",
@@ -310,11 +330,26 @@ def _render_linked_report(report: dict[str, Any]) -> str:
     ]
     for group_name, groups in report["aggregates"].items():
         for group, metrics in groups.items():
+            ter = metrics["aggregate_ter"]
+            rendered_ter = f"{ter:.4f}" if isinstance(ter, (int, float)) else "n/a"
             lines.append(
                 f"{group_name}:{group:<12} {metrics['measurement_count']:>12}  "
-                f"{metrics['task_count']:>5}  {metrics['aggregate_ter']:.4f}  "
+                f"{metrics['task_count']:>5}  {rendered_ter}  "
                 f"{metrics['total_tokens']:>5}"
             )
+    return "\n".join(lines)
+
+
+def _render_legacy_route_report(report: dict[str, dict[str, Any]]) -> str:
+    lines = ["route        sessions  TER     aligned  waste"]
+    for route, metrics in report.items():
+        ter = metrics["aggregate_ter"]
+        rendered_ter = f"{ter:.4f}" if isinstance(ter, (int, float)) else "n/a"
+        lines.append(
+            f"{route:<12} {metrics['session_count']:>8}  "
+            f"{rendered_ter:>7}  "
+            f"{metrics['aligned_tokens']:>7}  {metrics['waste_tokens']:>5}"
+        )
     return "\n".join(lines)
 
 
@@ -328,7 +363,9 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.command == "confidence":
             report = confidence_report(
-                _outcome_ledger(args.repo, args.config, read_only=True), args.repo
+                _outcome_ledger(args.repo, args.config, read_only=True),
+                args.repo,
+                bootstrap_samples=args.bootstrap_samples,
             )
             print(
                 json.dumps(report, indent=2, sort_keys=True, allow_nan=False)
@@ -456,13 +493,18 @@ def main(argv: list[str] | None = None) -> None:
                     or args.minimum_sessions is not None
                     or args.step_size is not None
                 ):
-                    raise TGVError(
-                        "--evidence does not support legacy threshold tuning options"
-                    )
+                    raise TGVError("--evidence does not support legacy threshold tuning options")
                 if args.json and args.format == "text":
                     raise TGVError("--json cannot be combined with --format text")
             elif args.json or args.repo is not None:
                 raise TGVError("--json and --repo require --evidence")
+            if args.evidence and args.accept_legacy_heuristic:
+                raise TGVError("--accept-legacy-heuristic is only for legacy calibration")
+            if not args.evidence and args.apply and not args.accept_legacy_heuristic:
+                raise TGVError(
+                    "Legacy calibration may change routing without verified correctness; "
+                    "--apply requires --accept-legacy-heuristic"
+                )
 
             config = load_config(args.config)
             if args.evidence:
@@ -496,9 +538,7 @@ def main(argv: list[str] | None = None) -> None:
                 local_answer_confidence=config.routing.local_answer_confidence,
                 local_code_confidence=config.routing.local_code_confidence,
                 target_waste_ratio=(
-                    args.target_waste_ratio
-                    if args.target_waste_ratio is not None
-                    else 0.25
+                    args.target_waste_ratio if args.target_waste_ratio is not None else 0.25
                 ),
                 minimum_sessions=(
                     args.minimum_sessions if args.minimum_sessions is not None else 5
@@ -608,19 +648,11 @@ def main(argv: list[str] | None = None) -> None:
                     else _render_linked_report(report)
                 )
                 return
-            report = aggregate_by_route(
-                score_sessions(args.sessions or Path(".tgv/sessions"))
-            )
+            report = aggregate_by_route(score_sessions(args.sessions or Path(".tgv/sessions")))
             if args.format == "json":
                 print(json.dumps(report, indent=2))
             else:
-                print("route        sessions  TER     aligned  waste")
-                for route, metrics in report.items():
-                    print(
-                        f"{route:<12} {metrics['session_count']:>8}  "
-                        f"{metrics['aggregate_ter']:.4f}  "
-                        f"{metrics['aligned_tokens']:>7}  {metrics['waste_tokens']:>5}"
-                    )
+                print(_render_legacy_route_report(report))
             return
         if args.command == "benchmark" and args.action == "observed":
             unsupported_options = [
@@ -650,6 +682,17 @@ def main(argv: list[str] | None = None) -> None:
                 if args.json
                 else render_observed_benchmark(report)
             )
+            return
+        if args.command == "outcomes" and args.action in {"list", "export"}:
+            ledger = _outcome_ledger(args.repo, args.config, read_only=True)
+            try:
+                records = ledger.query(limit=args.limit) if ledger.path.is_file() else []
+            except LedgerReadError as exc:
+                raise TGVError(str(exc)) from exc
+            if args.action == "list" or args.format == "json":
+                print(ledger.export_json(records))
+            else:
+                print(ledger.export_csv(records), end="")
             return
         with closing(TGVService.create(args.repo, args.config)) as service:
             if args.command == "inspect":
@@ -743,6 +786,7 @@ def main(argv: list[str] | None = None) -> None:
                     service.outcomes.record_human_feedback(
                         args.task_id, accepted=accepted, rework_required=not accepted
                     )
+                    service.outcomes.complete_pending_attempts(args.task_id)
                     print(
                         json.dumps(
                             {"task_id": args.task_id, "completed": True, "accepted": accepted}
@@ -760,6 +804,7 @@ def main(argv: list[str] | None = None) -> None:
                         session_path=args.session,
                         agent=args.agent,
                         attempt_id=args.attempt,
+                        replace_unmeasured=args.replace_unmeasured,
                     )
                     print(
                         json.dumps(
@@ -810,11 +855,7 @@ def main(argv: list[str] | None = None) -> None:
                         )
                     )
                 else:
-                    records = service.outcomes.query(limit=args.limit)
-                    if args.action == "list" or args.format == "json":
-                        print(service.outcomes.export_json(records))
-                    else:
-                        print(service.outcomes.export_csv(records), end="")
+                    raise TGVError(f"Unsupported outcomes action: {args.action}")
             elif args.command == "scoreboard":
                 profile_result = service.profile(args.request)
                 recommendation = service.scoreboard.recommend(

@@ -69,7 +69,7 @@ def test_cli_reports_repository_error_for_missing_root(tmp_path, capsys) -> None
 def test_calibrate_apply_requires_config(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setattr("tgv.cli.score_sessions", lambda _path: [])
     with pytest.raises(SystemExit) as exc:
-        main(["calibrate", "--sessions", str(tmp_path), "--apply"])
+        main(["calibrate", "--sessions", str(tmp_path), "--apply", "--accept-legacy-heuristic"])
     assert exc.value.code == 2
     assert "--apply requires --config" in capsys.readouterr().err
 

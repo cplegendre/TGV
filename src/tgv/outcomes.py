@@ -685,6 +685,19 @@ class OutcomeLedger:
         )
         return attempt
 
+    def complete_pending_attempts(self, task_id: str) -> int:
+        """Close pending attempts after explicit task completion, atomically.
+
+        Existing completed/failed attempts and historical timestamps are preserved.
+        """
+        with closing(self._connect()) as connection, connection:
+            cursor = connection.execute(
+                "UPDATE execution_attempts SET status = 'completed', completed_at = ? "
+                "WHERE task_id = ? AND status = 'pending'",
+                (datetime.now(UTC).isoformat(), task_id),
+            )
+            return cursor.rowcount
+
     def update_execution_attempt(
         self,
         attempt_id: str,
@@ -834,6 +847,106 @@ class OutcomeLedger:
             return OutcomeLedger._row_to_session_link(existing)
         return link
 
+    def replace_unmeasured_session(
+        self,
+        task_id: str,
+        *,
+        attempt_id: str,
+        agent: str,
+        external_session_id: str,
+        content_hash: str,
+        session_path: str,
+        expected_repository_id: str,
+    ) -> tuple[ExecutionAttempt, AgentSessionLink]:
+        """Explicitly refresh one unmeasured session, preserving its link identity.
+
+        Refuses replacement after any persisted measurement: a scored transcript is immutable.
+        The new validated session must retain its agent/session identity and attempt.
+        """
+        normalized_agent, normalized_session_id, normalized_hash, normalized_path = (
+            _normalize_session_link(agent, external_session_id, content_hash, session_path)
+        )
+        if normalized_hash is None or normalized_path is None:
+            raise ValueError("Replacement requires a content hash and session path")
+        agent = normalized_agent
+        external_session_id = normalized_session_id
+        content_hash = normalized_hash
+        session_path = normalized_path
+        with closing(self._connect()) as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                    "FROM agent_sessions LEFT JOIN session_locators "
+                    "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                    "WHERE agent_sessions.attempt_id = ?",
+                    (attempt_id,),
+                ).fetchall()
+                if len(row) != 1:
+                    raise ConflictingSessionLinkError(
+                        "Replacement requires exactly one existing session on the attempt"
+                    )
+                old = row[0]
+                attempt_row = connection.execute(
+                    "SELECT * FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
+                ).fetchone()
+                task = connection.execute(
+                    "SELECT repository_id FROM outcomes WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if (
+                    attempt_row is None
+                    or task is None
+                    or attempt_row["task_id"] != task_id
+                    or task["repository_id"] != expected_repository_id
+                ):
+                    raise CrossRepositoryError("Session replacement task or repository mismatch")
+                if old["agent"] != agent or old["external_session_id"] != external_session_id:
+                    raise ConflictingSessionLinkError(
+                        "Replacement cannot change the agent or external session identity"
+                    )
+                if (
+                    connection.execute(
+                        "SELECT 1 FROM ter_measurements WHERE attempt_id = ? "
+                        "OR session_link_id = ? LIMIT 1",
+                        (attempt_id, old["session_link_id"]),
+                    ).fetchone()
+                    is not None
+                ):
+                    raise ConflictingSessionLinkError(
+                        "Measured sessions cannot be replaced; create a new attempt"
+                    )
+                owner = connection.execute(
+                    "SELECT session_link_id FROM session_locators WHERE locator = ?",
+                    (session_path,),
+                ).fetchone()
+                if owner is not None and owner["session_link_id"] != old["session_link_id"]:
+                    raise ConflictingSessionLinkError("Session file path belongs to another link")
+                connection.execute(
+                    "UPDATE agent_sessions SET content_hash = ? WHERE session_link_id = ?",
+                    (content_hash, old["session_link_id"]),
+                )
+                connection.execute(
+                    "DELETE FROM session_locators WHERE session_link_id = ?",
+                    (old["session_link_id"],),
+                )
+                connection.execute(
+                    "INSERT INTO session_locators (session_link_id, locator) VALUES (?, ?)",
+                    (old["session_link_id"], session_path),
+                )
+                refreshed = connection.execute(
+                    "SELECT agent_sessions.*, session_locators.locator AS session_path "
+                    "FROM agent_sessions LEFT JOIN session_locators "
+                    "ON session_locators.session_link_id = agent_sessions.session_link_id "
+                    "WHERE agent_sessions.session_link_id = ?",
+                    (old["session_link_id"],),
+                ).fetchone()
+                result = (self._row_to_attempt(attempt_row), self._row_to_session_link(refreshed))
+                connection.commit()
+                return result
+            except BaseException:
+                connection.rollback()
+                raise
+
     def link_agent_session_for_task(
         self,
         task_id: str,
@@ -921,6 +1034,16 @@ class OutcomeLedger:
                     attempt_id=attempt_id,
                     started_at=started_at,
                 )
+                if (
+                    connection.execute(
+                        "SELECT 1 FROM agent_sessions WHERE attempt_id = ? LIMIT 1",
+                        (attempt.attempt_id,),
+                    ).fetchone()
+                    is not None
+                ):
+                    raise ConflictingSessionLinkError(
+                        "Execution attempt already has a linked session; create a retry attempt"
+                    )
                 link = self._insert_agent_session(
                     connection,
                     attempt_id=attempt.attempt_id,

@@ -5,6 +5,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from tgv import __version__
 from tgv.config import default_config
 from tgv.intelligence import TaskProfiler
 from tgv.models import OutcomeTask, TaskCategory
@@ -109,7 +110,7 @@ def run_benchmark(path: Path) -> dict[str, Any]:
         )
     total = len(rows)
     report: dict[str, Any] = {
-        "benchmark_version": "0.32",
+        "benchmark_version": __version__,
         "total_cases": total,
         "task_category_accuracy": category_correct / total if total else 0.0,
         "complexity_band_accuracy": band_correct / total if total else 0.0,
@@ -242,7 +243,7 @@ def run_outcome_benchmark(
         "maximum_safety_violation_rate": safety_violation_rate <= maximum_safety_violation_rate,
     }
     report: dict[str, Any] = {
-        "benchmark_version": "0.32",
+        "benchmark_version": __version__,
         "source": "outcome-ledger",
         "overall": overall,
         "by_model": {key: _outcome_group(value) for key, value in sorted(by_model.items())},

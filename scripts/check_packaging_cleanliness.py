@@ -10,10 +10,14 @@ against a tree you're about to zip and ship.
 
 from __future__ import annotations
 
+import argparse
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+_PRUNED_DIR_NAMES = {".git", ".venv", "venv"}
 
 _FORBIDDEN_DIR_NAMES = {
     "__pycache__",
@@ -25,11 +29,43 @@ _FORBIDDEN_DIR_NAMES = {
 _FORBIDDEN_FILE_SUFFIXES = (".tmp", ".pyc", ".bak", ".orig", ".swp")
 
 
+def _iter_candidates(root: Path) -> list[Path]:
+    """Return prospective archive members, excluding local virtualenvs.
+
+    In a git checkout, honour ``.gitignore`` so locally generated caches and
+    runtime state are not mistaken for archive contents. Fall back to a full
+    walk (minus VCS/virtualenv directories) for extracted archives.
+    """
+    if (root / ".git").exists():
+        try:
+            completed = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "ls-files",
+                    "-z",
+                    "--cached",
+                    "--others",
+                    "--exclude-standard",
+                ],
+                capture_output=True,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            pass
+        else:
+            return [root / name for name in completed.stdout.decode().split("\0") if name]
+    return [
+        path
+        for path in root.rglob("*")
+        if not any(part in _PRUNED_DIR_NAMES for part in path.relative_to(root).parts)
+    ]
+
+
 def find_offenders(root: Path = ROOT) -> list[str]:
     offenders: list[str] = []
-    for path in root.rglob("*"):
-        if ".git" in path.parts:
-            continue
+    for path in _iter_candidates(root):
         is_forbidden_dir = path.is_dir() and (
             path.name in _FORBIDDEN_DIR_NAMES or path.name.endswith(".egg-info")
         )
@@ -40,7 +76,15 @@ def find_offenders(root: Path = ROOT) -> list[str]:
 
 
 def main() -> None:
-    offenders = find_offenders()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=ROOT,
+        help="tree to inspect (defaults to the repository root)",
+    )
+    args = parser.parse_args()
+    offenders = find_offenders(args.root)
     if offenders:
         print("Packaging cleanliness check failed. Remove before archiving:", file=sys.stderr)
         for item in offenders:

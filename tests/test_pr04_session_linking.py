@@ -363,7 +363,7 @@ def test_link_rejects_invalid_session_id_token(
 def test_link_rejects_unsupported_agent(tmp_path: Path) -> None:
     session = _write_session(tmp_path / "session.jsonl")
     with pytest.raises(Exception, match="Unsupported agent session format"):
-        validate_agent_session(session, "codex")
+        validate_agent_session(session, "unsupported-agent")
 
 
 def test_link_rejects_repository_mismatch(
