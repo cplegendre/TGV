@@ -2,6 +2,10 @@
 
 > **Synthetic illustration:** The figures below are derived from the repository's routing benchmark shape and telemetry/report fields. They do not represent a production deployment or customer result.
 
+For real linked-session, TER, and confidence evidence, use the
+[TGV and TER end-to-end workflow](tgv-ter-workflow.md). Do not present synthetic routing telemetry
+or the estimates below as measured coding-agent efficiency.
+
 ## Scenario
 
 A Python service team evaluates TGV against 100 representative coding requests: repository lookups, localized fixes, clear multi-file changes, and high-risk architecture or security work. Deterministic safety rules remain enabled and telemetry records route metadata without repository excerpts.
@@ -36,6 +40,12 @@ The example suggests that 65% of requests could remain on local profiles while a
 
 1. Run `tgv bench routing --json` for deterministic routing evidence.
 2. Enable telemetry and route a representative request set.
-3. Score sessions with the optional TER integration.
-4. Run `tgv report --sessions .tgv/sessions --json`.
-5. Record accepted or rejected task outcomes and rerun the experimental scoreboard after the minimum sample threshold is met.
+3. Run `tgv report --sessions .tgv/sessions --json` to report routing/token-allocation proxies.
+4. For real execution evidence, follow the canonical workflow: prepare tasks, run an external
+   agent, link each Claude Code session, record completion and verification, then run
+   `tgv efficiency --linked`, `tgv benchmark observed`, and `tgv confidence`.
+5. Record accepted or rejected task outcomes and rerun the experimental scoreboard after the minimum
+   sample threshold is met.
+
+The optional `tgv report --sessions ... --ter` command scores the supplied JSONL with TER. On TGV
+telemetry, that JSONL is synthetic routing narration, not a downstream agent transcript.

@@ -1,6 +1,9 @@
 # Model routing
 
-TGV 0.22 routes software-engineering requests across four provider-neutral capability profiles:
+For the complete routing-to-TER evidence workflow, see
+[TGV and TER end-to-end workflow](tgv-ter-workflow.md).
+
+TGV 0.32 routes software-engineering requests across four provider-neutral capability profiles:
 
 | Route | Intended workload | Default reasoning budget |
 |---|---|---|
@@ -47,7 +50,7 @@ Parameter count is not used as the primary routing criterion. Model quality, act
 
 ## Execution scope
 
-TGV 0.22 selects profiles and prepares handoffs. Local routing uses the configured Ollama-compatible provider. External execution remains adapter-driven through the existing command handoff interface; provider-specific autonomous execution, retries, tool normalization, and validation loops remain future work.
+TGV 0.32 selects profiles and prepares handoffs. Local routing uses the configured Ollama-compatible provider. External execution remains adapter-driven through the existing command handoff interface; provider-specific autonomous execution, retries, tool normalization, and validation loops remain future work.
 
 ## Evidence-gated threshold calibration
 
@@ -118,7 +121,8 @@ per-target counts cover invalid measurements attached to that target's eligible 
 Verification coverage, missing measurements, selection bias, task difficulty, model
 selection, and historical policy changes limit interpretation. Wilson intervals describe
 observed verified outcomes; they do not remove these biases. TER efficiency is separate
-from verified correctness. These diagnostics do not implement confidence calibration or
+from verified correctness. Evidence mode does not calculate Brier score, ECE, or reliability
+bins; `tgv confidence` provides those read-only diagnostics separately. Neither command performs
 counterfactual execution analysis.
 
 ### Explicit application safety

@@ -1,5 +1,8 @@
 # Routing Intelligence and Evaluation
 
+For the complete routing-to-TER evidence workflow, including manual session linking and
+verified-outcome reporting, see [TGV and TER end-to-end workflow](tgv-ter-workflow.md).
+
 ```mermaid
 flowchart LR
   R[Request] --> P1[Initial TaskProfiler]
@@ -26,7 +29,11 @@ Repository content is untrusted evidence. Denied files, binary files, oversized 
 
 ## Outcome ledger
 
-The SQLite ledger stores hashes, normalized categories, file paths, symbol identifiers, aggregate metrics, and validation outcomes. It does not store source code. Raw request retention is disabled unless `intelligence.retain_raw_prompts` is explicitly enabled. Schema version 1 is initialized transactionally.
+The SQLite ledger stores request and content hashes, normalized categories, file and symbol
+identifiers, aggregate metrics, and validation outcomes. It does not store source code. Raw request
+retention is disabled unless `intelligence.retain_raw_prompts` is explicitly enabled. Schema
+version 3 is initialized transactionally; older supported schemas are migrated only by writable
+commands, while read-only diagnostics refuse incompatible versions.
 
 ## Scoreboard
 
@@ -54,10 +61,13 @@ tgv benchmark outcomes --repo . --json
 ```
 
 `outcomes link` associates a validated external agent session with an execution attempt using a
-SHA-256 content hash and the session identifier. It never stores the session path or contents, and
-identical links are idempotent. `outcomes validate` records user-attested positive or negative test
-and static-analysis results without executing them and without changing the existing
-verified-success semantics.
+SHA-256 content hash, the session identifier, and an explicit absolute session file locator. It
+does not store raw transcript contents or classified spans, and identical links are idempotent.
+The locator is retained so linked TER analysis can revalidate the same file; treat it as sensitive
+path metadata. `outcomes validate` records user-attested positive or negative test and static-analysis
+results without executing them and without changing the existing verified-success semantics.
+Only the `claude-code` session format is currently supported. See
+[linking and measurement](tgv-ter-workflow.md#6-link-the-real-session-to-the-outcome-task).
 
 ## Benchmark scope
 

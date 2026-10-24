@@ -5,6 +5,10 @@
 
 TGV is an experimental local-first gateway for AI coding agents. It inspects a task, gathers repository evidence, decides whether the request can be handled locally, and prepares a compact handoff when a frontier model is warranted.
 
+For the complete linked-session and TER measurement workflow, see
+[TGV and TER end-to-end workflow](docs/tgv-ter-workflow.md). For the first local setup, start with
+[Getting started](docs/getting-started.md).
+
 > [!WARNING]
 > Version 0.32 is a production-candidate pre-1.0 release with graceful draining, Prometheus-compatible metrics export, real outcome-ledger evaluation, counterfactual route explanations, private atomic state files, cross-platform worker cancellation, and the CI-enforced 104-case intelligence benchmark. It is not yet a hardened network security boundary.
 
@@ -61,6 +65,7 @@ Only the latest published minor line is supported. During the current `0.x` phas
 - Prometheus textfile export for daemon readiness, request counters, route counts, worker restarts, routing latency, and provider calls/errors.
 - Counterfactual route explanations through `tgv explain`: why the route won and what request/history change could make another route win.
 - Outcome-ledger evaluation through `tgv benchmark outcomes`, including verified success, human acceptance, rework, safety, retry, latency, and cost summaries by model/tier/category.
+- Read-only confidence diagnostics through `tgv confidence`, including Brier score, expected calibration error, reliability bins, and verified-outcome coverage.
 - Atomic owner-only operational files for status, metrics, indexes, telemetry, and context bundles on POSIX-compatible filesystems.
 - 104-case integrated intelligence benchmark with a CI-enforced release-quality gate.
 
@@ -70,7 +75,7 @@ Only the latest published minor line is supported. During the current `0.x` phas
 Developer
    |
    v
-TGV CLI / future daemon
+TGV CLI / stdio daemon
    |-- Repository tools and policy
    |-- Local Fast model (Ollama)
    |-- Local Code model (Ollama)
@@ -197,9 +202,14 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTI
 ## Measuring routing efficiency
 
 TGV integrates optionally with [TER](https://github.com/cplegendre/TER), the Token
-Efficiency Ratio analyzer for Claude Code sessions. The integration answers a practical
+Efficiency Ratio analyzer for agent-session JSONL. TGV currently links and validates the Claude
+Code JSONL format. The integration answers a practical
 question: are TGV's `local_fast`, `local_code`, `frontier_standard`, and `frontier_deep` routing decisions producing
 efficient agent sessions, or are some routes accumulating avoidable token waste?
+
+The commands below summarize the measurement surface. The canonical step-by-step path, including
+manual session linking, verification evidence, reports, calibration, and confidence diagnostics, is
+[TGV and TER end-to-end workflow](docs/tgv-ter-workflow.md).
 
 ### Enable privacy-minimal telemetry
 
@@ -238,7 +248,9 @@ tgv efficiency --sessions .tgv/sessions --format json
 Warning: TGV's built-in telemetry is synthetic routing narration, not a downstream
 coding-agent transcript. TER scores the input JSONL, so these numbers are **not**
 evidence of real coding-agent execution efficiency unless real session logs are supplied
-and reliably associated with the route. Session linking is future work.
+and reliably associated with the route. To measure a real Claude Code session, link it explicitly
+with `tgv outcomes link`, then use `tgv efficiency --linked`. See
+[session linking and measurement](docs/tgv-ter-workflow.md#6-link-the-real-session-to-the-outcome-task).
 
 The report groups sessions by `local_fast`, `local_code`, `frontier_standard`, and `frontier_deep`, showing aggregate
 TER, aligned tokens, waste tokens, and session count. Higher TER indicates a larger share
@@ -304,6 +316,8 @@ Recommendations preserve the configured thresholds and set `application_permitte
 The default is read-only. `--apply` remains explicit but cannot modify configuration
 without a defensible eligible proposal; the current evidence engine emits none.
 See [model routing](docs/model-routing.md) for statistical and application limitations.
+The complete linked-evidence workflow is in
+[TGV and TER end-to-end workflow](docs/tgv-ter-workflow.md#12-run-evidence-gated-calibration).
 
 ### Inspect confidence diagnostics
 
@@ -323,7 +337,8 @@ success. Scores are exploratory, subject to verification and selection bias, and
 no routing or threshold changes. The command reads the configured outcome database without
 creating or migrating it, executing agents, or invoking TER. See
 [confidence semantics](docs/model-routing.md#routing-confidence-semantics) and
-[diagnostic definitions](docs/benchmarks.md#confidence-diagnostics).
+[diagnostic definitions](docs/benchmarks.md#confidence-diagnostics). For the full evidence
+pipeline, see [TGV and TER end-to-end workflow](docs/tgv-ter-workflow.md#13-run-confidence-diagnostics).
 
 ### Explain routing and inspect local health
 

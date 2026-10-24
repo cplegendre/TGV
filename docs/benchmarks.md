@@ -2,6 +2,9 @@
 
 TGV includes two deterministic, offline diagnostics. They are regression tools for a repository and fixture state, not universal performance claims.
 
+For the end-to-end workflow that produces linked outcome and TER evidence, see
+[TGV and TER end-to-end workflow](tgv-ter-workflow.md).
+
 ## Routing benchmark
 
 Run `tgv bench routing` or `python -m tgv.bench.routing`. Add `--json` for automation. The committed JSONL corpus contains 76 labeled cases spanning simple extraction, repository inspection, bounded code work, ambiguity, destructive/security/concurrency/architecture risk, privacy constraints, local-only requests, frontier handoff, and conflicting signals.
@@ -29,9 +32,9 @@ Run `tgv benchmark outcomes --repo . --json` after a deployment has recorded out
 
 ## Observational routing benchmark
 
-PR-05 linked real agent sessions to durable outcome tasks and persisted aggregate TER
-measurements. To collect that evidence, link each external agent session, record outcome
-validation evidence, and run:
+Linked real agent sessions can be associated with durable outcome tasks and persisted as
+aggregate TER measurements. To collect that evidence, link each external agent session, record
+outcome completion and validation evidence, and run:
 
 ```bash
 tgv efficiency --linked --repo .
@@ -61,7 +64,7 @@ served either by deterministic `frontier_standard` routing or scoreboard-selecte
 `local_code` routing. Historical tasks created before route persistence are grouped under
 `unavailable` rather than assigned a fabricated route.
 
-For each linked session, TGV uses PR-05's deterministic canonical measurement policy: the
+For each linked session, TGV uses the deterministic canonical measurement policy: the
 most recent valid measurement wins, with measurement id breaking ties. If multiple analyzer
 versions are present, the token-weighted aggregate uses only the analyzer version with the
 most measured sessions; ties break lexicographically. That one global scope is applied to
@@ -104,6 +107,8 @@ schemas require an explicit upgrade elsewhere, and malformed ledgers produce err
 echoing task content. SQLite may create transient WAL coordination sidecars for a live WAL
 database; the command does not change journal mode or permissions. Configured relative
 database paths resolve against `--repo`; absolute paths are used as configured.
+See [the confidence workflow step](tgv-ter-workflow.md#13-run-confidence-diagnostics) for its
+place in the full evidence pipeline.
 
 ### Observation and outcome definitions
 
