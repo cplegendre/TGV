@@ -246,9 +246,7 @@ def _analyzer_scope_summaries(
     ]
 
 
-def _evidence_sufficiency(
-    aggregated_sessions: int, verified_outcomes: int
-) -> dict[str, Any]:
+def _evidence_sufficiency(aggregated_sessions: int, verified_outcomes: int) -> dict[str, Any]:
     minimum_sample_size = 20
     reasons: list[str] = []
     if aggregated_sessions == 0:
@@ -260,7 +258,9 @@ def _evidence_sufficiency(
     ):
         reasons.append("sample size is below the conservative minimum")
     status = (
-        "missing" if aggregated_sessions == 0 or verified_outcomes == 0 else "limited"
+        "missing"
+        if aggregated_sessions == 0 or verified_outcomes == 0
+        else "limited"
         if aggregated_sessions < minimum_sample_size or verified_outcomes < minimum_sample_size
         else "sufficient"
     )
@@ -348,9 +348,7 @@ def _group(
     grouped: dict[str, list[TaskObservation]] = {}
     for task in tasks:
         grouped.setdefault(key(task), []).append(task)
-    return {
-        name: _group_metrics(items, selected_scope) for name, items in sorted(grouped.items())
-    }
+    return {name: _group_metrics(items, selected_scope) for name, items in sorted(grouped.items())}
 
 
 def _serialize_session(
@@ -419,9 +417,7 @@ def _empty_benchmark(repository_id: str) -> dict[str, Any]:
                 ),
                 None,
             ),
-            "by_task_category": _group(
-                [], lambda task: task.task.task_category.value, None
-            ),
+            "by_task_category": _group([], lambda task: task.task.task_category.value, None),
         },
         "observations": [],
         "methodology": {
@@ -473,9 +469,7 @@ def observed_benchmark(ledger: OutcomeLedger, repository_root: Path) -> dict[str
     """Report observational evidence already persisted in the outcome ledger."""
     if not ledger.path.is_file():
         return _empty_benchmark(ledger.repository_id(repository_root))
-    read_only_ledger = (
-        ledger if ledger.read_only else OutcomeLedger(ledger.path, read_only=True)
-    )
+    read_only_ledger = ledger if ledger.read_only else OutcomeLedger(ledger.path, read_only=True)
     data = _load_observations(read_only_ledger, repository_root)
     selected_scope = data.selected_analyzer_scope
     overall = _group_metrics(data.tasks, selected_scope)
@@ -501,9 +495,7 @@ def observed_benchmark(ledger: OutcomeLedger, repository_root: Path) -> dict[str
         "coverage": overall,
         "overall": overall,
         "groups": {
-            "by_route": _group(
-                data.tasks, lambda task: _route_for_task(task.task), selected_scope
-            ),
+            "by_route": _group(data.tasks, lambda task: _route_for_task(task.task), selected_scope),
             "by_model": _group(
                 data.tasks,
                 lambda task: task.task.selected_model or "unassigned",

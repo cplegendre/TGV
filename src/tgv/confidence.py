@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import sqlite3
 from bisect import bisect_right
 from collections import Counter
@@ -260,7 +261,57 @@ def _serialize(value: Any) -> Any:
     return value
 
 
-def confidence_report(ledger: OutcomeLedger, repository_root: Path) -> dict[str, Any]:
+def _bootstrap_intervals(observations: list[ConfidenceObservation], samples: int) -> dict[str, Any]:
+    """Deterministic task-level bootstrap; descriptive, never a routing decision input."""
+    scored = [
+        (item.confidence, item.outcome)
+        for item in observations
+        if item.confidence is not None and item.outcome is not None
+    ]
+    if not scored:
+        return {
+            "samples": samples,
+            "sample_size": 0,
+            "brier_interval_95": None,
+            "ece_interval_95": None,
+            "method": "task bootstrap, percentile, seed 0",
+        }
+    rng = random.Random(0)
+    metrics: list[list[float]] = [[], []]
+    for _ in range(samples):
+        draw = [scored[rng.randrange(len(scored))] for _ in scored]
+        brier = math.fsum((confidence - outcome) ** 2 for confidence, outcome in draw) / len(draw)
+        ece = math.fsum(
+            abs(
+                math.fsum(
+                    outcome - confidence
+                    for confidence, outcome in draw
+                    if min(int(confidence * BIN_COUNT), BIN_COUNT - 1) == index
+                )
+            )
+            for index in range(BIN_COUNT)
+        ) / len(draw)
+        metrics[0].append(brier)
+        metrics[1].append(ece)
+
+    def interval(values: list[float]) -> list[float]:
+        values.sort()
+        return [values[int((samples - 1) * 0.025)], values[int((samples - 1) * 0.975)]]
+
+    return {
+        "samples": samples,
+        "sample_size": len(scored),
+        "brier_interval_95": interval(metrics[0]),
+        "ece_interval_95": interval(metrics[1]),
+        "method": "task bootstrap, percentile, seed 0; descriptive only",
+    }
+
+
+def confidence_report(
+    ledger: OutcomeLedger, repository_root: Path, *, bootstrap_samples: int = 0
+) -> dict[str, Any]:
+    if not 0 <= bootstrap_samples <= 10000:
+        raise ConfidenceDiagnosticError("bootstrap_samples must be between 0 and 10000")
     observations = _load_observations(ledger, repository_root)
     report: dict[str, Any] = _serialize(
         {
@@ -369,6 +420,10 @@ def confidence_report(ledger: OutcomeLedger, repository_root: Path) -> dict[str,
         }
     )
 
+    if bootstrap_samples:
+        report["bootstrap_uncertainty"] = _serialize(
+            _bootstrap_intervals(observations, bootstrap_samples)
+        )
     return report
 
 

@@ -116,8 +116,16 @@ def test_efficiency_error_and_edge_branches(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="No route_decision"):
         _route_from_log(bad)
     empty = aggregate_by_route([ScoredSession("local_fast", 0.2, 0, 0)])
-    assert empty["local_fast"]["aggregate_ter"] == 1.0
+    assert empty["local_fast"]["aggregate_ter"] is None
+    assert empty["local_fast"]["efficiency_status"] == "insufficient-token-evidence"
     assert waste_ratio({"aligned_tokens": 0, "waste_tokens": 0}) == 0.0
+    zero_proposals = propose_thresholds(
+        {"local_fast": {"aligned_tokens": 0, "waste_tokens": 0, "session_count": 5}},
+        local_answer_confidence=0.5,
+        local_code_confidence=0.5,
+    )
+    assert zero_proposals[0].action == "insufficient_data"
+    assert zero_proposals[0].proposed_threshold == 0.5
     report = {
         "local_fast": {"aligned_tokens": 5, "waste_tokens": 95, "session_count": 5},
         "local_code": {"aligned_tokens": 95, "waste_tokens": 5, "session_count": 5},
@@ -225,7 +233,7 @@ def test_cli_calibrate_apply_and_text(
         "tgv.cli.score_sessions",
         lambda _: [ScoredSession("local_fast", 0.5, 90, 10)] * 5,
     )
-    main(["calibrate", "--config", str(config_path), "--apply"])
+    main(["calibrate", "--config", str(config_path), "--apply", "--accept-legacy-heuristic"])
     assert "local_fast:" in capsys.readouterr().out
     assert "local_answer_confidence" in config_path.read_text(encoding="utf-8")
 
@@ -241,9 +249,7 @@ def test_cli_efficiency_nonempty_text(
 def test_optional_ter_analyzer_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from tgv.efficiency import TERAnalysis, _ter_analyzer
 
-    monkeypatch.setattr(
-        "tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0"
-    )
+    monkeypatch.setattr("tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0")
     monkeypatch.setattr(
         "tgv.efficiency._run_ter_analysis",
         lambda executable, path, timeout, analyzer_version: TERAnalysis(

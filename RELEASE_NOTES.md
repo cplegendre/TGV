@@ -1,18 +1,24 @@
-# TGV 0.32 release notes
+# TGV 0.39 release notes
 
-TGV 0.32 moves the project from operational readiness toward a production-candidate posture. The release focuses on graceful lifecycle behavior, externally consumable observability, real outcome-based evaluation, and a more transparent routing UX.
+Phase 3 adds opt-in replacement of unmeasured session links (PR-16), release-documentation updates (PR-17), optional bootstrap confidence intervals (partial PR-18), and an explicit safety acknowledgement for legacy calibration writes (PR-19). Attempt-scoped outcome pairing and decision-source eligibility diagnostics remain outstanding. See `PHASE3_IMPLEMENTATION.md` and `docs/RELEASE_REVIEW.md` for validation limits.
 
-## Highlights
+The v0.39 review pass fixed two measurement-integrity defects: legacy zero-token route
+aggregation no longer reports perfect TER or permits threshold lowering, and text-mode linked
+reports render unavailable TER safely. `outcomes list` and `outcomes export` no longer create a
+missing ledger.
 
-- **Graceful draining and shutdown.** `tgv serve` now stops accepting new work after SIGTERM/SIGINT, marks readiness as draining, lets the in-flight request finish within `--shutdown-grace-seconds`, and terminates the isolated worker if the grace period expires.
-- **Prometheus-compatible metrics export.** `--metrics-file` writes atomic Prometheus textfile metrics for readiness, draining state, request outcomes, route counts, worker restarts, routing latency, and provider calls/errors. `tgv metrics --status-file ...` renders the same status on demand.
-- **Real outcome-ledger evaluation.** `tgv benchmark outcomes` evaluates observed privacy-minimal outcomes rather than synthetic labels. It reports verified success, human acceptance, rework, retries, safety, latency, and estimated cost by model, capability tier, and task category. `--enforce` can require minimum verified evidence, minimum success, and a maximum safety-violation rate.
-- **Counterfactual route explanations.** `tgv explain` shows why the selected route won and estimates what request/history/policy changes could make each alternative route win. This complements the raw machine evidence already exposed by `tgv route --explain`.
-- **Private atomic local state.** Daemon status, Prometheus metrics, repository indexes, telemetry session files, and generated context-bundle files are written atomically and use owner-only permissions on POSIX-compatible filesystems. Outcome SQLite databases are also tightened to owner-only mode where supported.
-- **Preserved routing quality gate.** The 104-case integrated benchmark remains CI-enforced and the original deterministic routing benchmark remains unchanged.
+The final release-hardening pass makes `outcomes complete` atomic across task status, human
+feedback, and pending-attempt closure. Execution-attempt updates now enforce explicit lifecycle
+transitions while preserving historical statuses and retry workflows. Public TER measurement
+writes reject zero-token, negative, non-integral, inconsistent-total, non-finite, and out-of-range
+values before persistence; existing historical rows remain readable and are not rewritten.
+Full verification results and remaining limitations are in `docs/CODEX_AUDIT.md`,
+`docs/PR10_PR19_REVIEW.md`, and `docs/GITHUB_RELEASE_CHECKLIST.md`.
 
-## Validation
+Phase 2 integrates PR-15 (TGV half of a versioned TER JSON contract), PR-14 (Codex linking), and guards for PR-13 (TER-side Codex loader, **not included**).
 
-The v0.32 source tree passes the full local pytest suite above the required 98% branch-aware coverage threshold. The integrated 104-case intelligence benchmark and 76-case deterministic routing benchmark remain release gates/diagnostics.
+The existing TER 3.0.0 unversioned JSON contract is still accepted. Newer TER 3.x CLI builds must emit `schema_version: 1` in their JSON analyses. Unsupported schema versions, TER major versions, and unversioned newer output fail closed. TER 4 has a distinct architecture and is not declared compatible.
 
-The environment used to prepare this archive does not have Ruff, mypy, or `pip-audit` installed, so those three checks are not claimed as locally executed. They remain configured in CI.
+Codex `rollout-*.jsonl` files can now be explicitly linked via `--agent codex` when they contain a stable session_meta identity and nonempty user and assistant text. The legacy TER analyzer cannot interpret these files: linked Codex measurement fails with an actionable error instead of persisting a misleading zero-token result. A validated TER-side Codex loader is required for automated scoring.
+
+No TER repository modifications are included in this TGV archive.

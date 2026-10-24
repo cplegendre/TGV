@@ -260,9 +260,7 @@ def test_historical_advanced_route_is_unavailable_not_inferred(tmp_path: Path) -
     repo = _repo(tmp_path)
     task_id = _task(repo, tier=CapabilityTier.ADVANCED, model="advanced-model")
     with sqlite3.connect(repo / ".tgv" / "outcomes.sqlite3") as connection:
-        connection.execute(
-            "UPDATE outcomes SET metadata = '{}' WHERE task_id = ?", (task_id,)
-        )
+        connection.execute("UPDATE outcomes SET metadata = '{}' WHERE task_id = ?", (task_id,))
     result = _link(repo, task_id, _session(tmp_path / "session.jsonl"))
     _measurement(repo, result)
 
@@ -435,9 +433,7 @@ def test_analyzer_scope_is_selected_globally_across_groups(tmp_path: Path) -> No
     frontier = _link(
         repo,
         frontier_task,
-        _session(
-            tmp_path / "frontier.jsonl", session_id=OTHER_SESSION_ID
-        ),
+        _session(tmp_path / "frontier.jsonl", session_id=OTHER_SESSION_ID),
     )
     other_local = _link(
         repo,
@@ -503,16 +499,31 @@ def test_evidence_sufficiency_uses_selected_analyzer_scope(tmp_path: Path) -> No
     ]
 
 
-def test_zero_token_measurement_preserves_pr05_semantics(tmp_path: Path) -> None:
+def test_zero_token_measurement_does_not_claim_perfect_efficiency(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     task_id = _task(repo)
     result = _link(repo, task_id, _session(tmp_path / "session.jsonl"))
-    _measurement(repo, result, ter=1.0, aligned=0, waste=0)
+    database_path = repo / ".tgv" / "outcomes.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO ter_measurements "
+            "(measurement_id, attempt_id, session_link_id, analyzer, analyzer_version, "
+            "measured_at, metrics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                "legacy-zero-token",
+                result.attempt.attempt_id,
+                result.link.session_link_id,
+                "TER CLI",
+                "3.0.0",
+                datetime(2026, 1, 1, tzinfo=UTC).isoformat(),
+                json.dumps({"aggregate_ter": 1.0, "aligned_tokens": 0, "waste_tokens": 0}),
+            ),
+        )
     _complete(repo, task_id)
 
     report = observed_benchmark(_ledger(repo), repo)
     assert report["coverage"]["measured_session_count"] == 1
-    assert report["coverage"]["aggregate_ter"] == 1.0
+    assert report["coverage"]["aggregate_ter"] is None
     assert report["coverage"]["total_tokens"] == 0
     assert report["observations"][0]["metrics"]["total_tokens"] == 0
 
@@ -523,17 +534,13 @@ def test_failed_attempt_followed_by_successful_retry_remains_one_verified_task(
     repo = _repo(tmp_path)
     task_id = _task(repo)
     first = _link(repo, task_id, _session(tmp_path / "first.jsonl"))
-    _ledger(repo).update_execution_attempt(
-        first.attempt.attempt_id, status="failed"
-    )
+    _ledger(repo).update_execution_attempt(first.attempt.attempt_id, status="failed")
     second = _link(
         repo,
         task_id,
         _session(tmp_path / "second.jsonl", session_id=OTHER_SESSION_ID),
     )
-    _ledger(repo).update_execution_attempt(
-        second.attempt.attempt_id, status="completed"
-    )
+    _ledger(repo).update_execution_attempt(second.attempt.attempt_id, status="completed")
     _measurement(repo, first)
     _measurement(repo, second, ter=0.5, aligned=50, waste=50)
     _complete(repo, task_id)
@@ -546,10 +553,7 @@ def test_failed_attempt_followed_by_successful_retry_remains_one_verified_task(
     assert coverage["attempt_status_counts"] == {"completed": 1, "failed": 1}
     assert coverage["verified_success_count"] == 1
     assert coverage["verified_failure_count"] == 0
-    assert {
-        (item["attempt_id"], item["attempt_status"])
-        for item in report["observations"]
-    } == {
+    assert {(item["attempt_id"], item["attempt_status"]) for item in report["observations"]} == {
         (first.attempt.attempt_id, "failed"),
         (second.attempt.attempt_id, "completed"),
     }
@@ -873,9 +877,7 @@ def test_existing_v3_ledger_is_opened_without_database_or_new_sidecar_files(
     }
     before = database_path.read_bytes()
 
-    report = observed_benchmark(
-        OutcomeLedger(database_path, read_only=True), repo
-    )
+    report = observed_benchmark(OutcomeLedger(database_path, read_only=True), repo)
 
     assert report["coverage"]["measured_session_count"] == 1
     assert database_path.read_bytes() == before
@@ -966,10 +968,29 @@ def test_invalid_latest_measurement_does_not_displace_valid_historical_scope(
     task_id = _task(repo)
     result = _link(repo, task_id, _session(tmp_path / "session.jsonl"))
     valid = _measurement(repo, result, measured_at=datetime(2026, 1, 1, tzinfo=UTC))
-    _measurement(
-        repo, result, ter=1.1, analyzer_version="3.0.1",
-        measured_at=datetime(2026, 1, 2, tzinfo=UTC),
-    )
+    database_path = repo / ".tgv" / "outcomes.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO ter_measurements "
+            "(measurement_id, attempt_id, session_link_id, analyzer, analyzer_version, "
+            "measured_at, metrics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                "legacy-invalid-ter",
+                result.attempt.attempt_id,
+                result.link.session_link_id,
+                "TER CLI",
+                "3.0.1",
+                datetime(2026, 1, 2, tzinfo=UTC).isoformat(),
+                json.dumps(
+                    {
+                        "aggregate_ter": 1.1,
+                        "aligned_tokens": 80,
+                        "waste_tokens": 20,
+                        "total_tokens": 100,
+                    }
+                ),
+            ),
+        )
     report = observed_benchmark(_ledger(repo), repo)
     assert report["coverage"]["invalid_measurement_count"] == 1
     assert report["coverage"]["selected_analyzer_version"] == "3.0.0"

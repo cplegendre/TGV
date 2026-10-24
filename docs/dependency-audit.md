@@ -1,8 +1,12 @@
 # Dependency audit
 
-## TGV 0.32
+## TGV 0.39
 
-The local preparation environment does not have `pip-audit`, Ruff, or mypy executables installed, so this archive does not claim those checks were executed locally. The CI workflow remains the authoritative network-enabled dependency and static-analysis gate.
+The v0.39 review environment executed the local checks: `ruff check .`,
+`ruff format --check .`, `mypy --strict src/tgv`, and `pip-audit` all pass
+after refreshing the development environment to current patched releases.
+The CI workflow remains the authoritative network-enabled dependency and
+static-analysis gate for clean installs across Python 3.11-3.13.
 
 CI should run the following authoritative audit in a network-enabled environment:
 

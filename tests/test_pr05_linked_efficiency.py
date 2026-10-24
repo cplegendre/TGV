@@ -345,7 +345,7 @@ def test_ter_failure_and_malformed_json_are_actionable(tmp_path: Path) -> None:
     executable = tmp_path / "fake-ter"
     executable.write_text(
         "#!/bin/sh\n"
-        "if [ \"$1\" = \"--version\" ]; then printf 'ter 3.0.0\\n'; exit 0; fi\n"
+        'if [ "$1" = "--version" ]; then printf \'ter 3.0.0\\n\'; exit 0; fi\n'
         "printf 'not-json'\n",
         encoding="utf-8",
     )
@@ -453,9 +453,7 @@ def test_repeated_analyzer_versions_do_not_double_count_a_session(
     assert report["overall"]["superseded_measurements"] == 1
     assert report["overall"]["total_tokens"] == 10
     latest_record = next(
-        item
-        for item in report["measurements"]
-        if item["measurement_id"] == latest.measurement_id
+        item for item in report["measurements"] if item["measurement_id"] == latest.measurement_id
     )
     assert latest_record["aggregate_selected"] is True
 

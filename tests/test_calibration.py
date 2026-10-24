@@ -56,6 +56,16 @@ def test_calibrate_apply_writes_but_dry_run_does_not(tmp_path: Path, monkeypatch
     monkeypatch.setattr("tgv.cli.score_sessions", lambda _: sessions)
     main(["calibrate", "--config", str(config), "--format", "json"])
     assert config.read_text() == original
-    main(["calibrate", "--config", str(config), "--apply", "--format", "json"])
+    main(
+        [
+            "calibrate",
+            "--config",
+            str(config),
+            "--apply",
+            "--accept-legacy-heuristic",
+            "--format",
+            "json",
+        ]
+    )
     loaded = yaml.safe_load(config.read_text())
     assert loaded["routing"]["local_answer_confidence"] == 0.87

@@ -100,6 +100,11 @@ tgv outcomes link TASK_ID \
 tgv outcomes validate TASK_ID --tests-passed --static-checks-passed --repo .
 ```
 
+Codex `rollout-*.jsonl` files can be linked with `--agent codex`. This validates a stable
+`session_meta` identity and nonempty user/assistant text, but linked Codex measurement is
+unsupported until TER ships a validated Codex loader; `efficiency --linked` fails closed instead
+of persisting a misleading result.
+
 Linking stores the agent name, external session identifier, SHA-256 content hash, attempt
 correlation, timestamps, and an absolute session file locator. It does not store raw transcript
 contents, prompts, responses, or classified spans. The original session file remains at its

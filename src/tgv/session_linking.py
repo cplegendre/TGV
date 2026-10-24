@@ -96,9 +96,23 @@ def link_session_to_task(
     session_path: Path,
     agent: str,
     attempt_id: str | None = None,
+    replace_unmeasured: bool = False,
 ) -> SessionLinkResult:
     """Link a validated external session to an attempt for an existing task."""
     validated = validate_agent_session(session_path, agent)
+    if replace_unmeasured:
+        if attempt_id is None:
+            raise ValidationFailure("--replace-unmeasured requires --attempt")
+        attempt, link = ledger.replace_unmeasured_session(
+            task_id,
+            attempt_id=attempt_id,
+            agent=validated.agent,
+            external_session_id=validated.external_session_id,
+            content_hash=validated.content_hash,
+            session_path=str(validated.session_path),
+            expected_repository_id=ledger.repository_id(repository_root),
+        )
+        return SessionLinkResult(task_id=task_id, attempt=attempt, link=link, created=False)
     try:
         attempt, link, created = ledger.link_agent_session_for_task(
             task_id,
@@ -164,6 +178,8 @@ def _validate_claude_code(path: Path) -> tuple[str, str, bytes]:
     session_id: str | None = None
     saw_user = False
     saw_assistant = False
+    meaningful_user = False
+    meaningful_assistant = False
     content = bytearray()
     try:
         with _open_session_file(path) as handle:
@@ -208,6 +224,25 @@ def _validate_claude_code(path: Path) -> tuple[str, str, bytes]:
                     raise ValidationFailure("Agent session contains mismatched sessionId values")
                 saw_user = saw_user or entry_type == "user"
                 saw_assistant = saw_assistant or entry_type == "assistant"
+                message_content = entry["message"].get("content")
+                # Claude exports text either directly or as text blocks. Tool-only
+                # traffic is not sufficient proof of a scorable conversation.
+                meaningful = (
+                    isinstance(message_content, str) and bool(message_content.strip())
+                ) or (
+                    isinstance(message_content, list)
+                    and any(
+                        isinstance(block, dict)
+                        and block.get("type") == "text"
+                        and isinstance(block.get("text"), str)
+                        and bool(block["text"].strip())
+                        for block in message_content
+                    )
+                )
+                if entry_type == "user":
+                    meaningful_user = meaningful_user or meaningful
+                else:
+                    meaningful_assistant = meaningful_assistant or meaningful
     except OSError as exc:
         raise ValidationFailure("Agent session file is not readable") from exc
 
@@ -217,9 +252,88 @@ def _validate_claude_code(path: Path) -> tuple[str, str, bytes]:
         raise ValidationFailure(
             "Agent session must contain at least one user and one assistant message"
         )
+    if not (meaningful_user and meaningful_assistant):
+        raise ValidationFailure("Agent session requires non-empty user and assistant text content")
     return session_id, digest.hexdigest(), bytes(content)
 
 
 _AGENT_VALIDATORS: dict[str, Callable[[Path], tuple[str, str, bytes]]] = {
     "claude-code": _validate_claude_code,
 }
+
+
+def _validate_codex(path: Path) -> tuple[str, str, bytes]:
+    """Validate the observed Codex rollout envelope, without scoring it.
+
+    This is deliberately fail-closed: only session_meta and meaningful text
+    records establish identity/content. TER must independently support Codex.
+    """
+    if path.suffix.lower() != ".jsonl" or not path.name.startswith("rollout-"):
+        raise ValidationFailure("Codex sessions must be rollout-*.jsonl files")
+    digest = hashlib.sha256()
+    content = bytearray()
+    session_id: str | None = None
+    saw_user = False
+    saw_assistant = False
+    try:
+        with _open_session_file(path) as handle:
+            total_bytes = 0
+            line_number = 0
+            while raw := handle.readline(MAX_SESSION_BYTES - total_bytes + 1):
+                line_number += 1
+                total_bytes += len(raw)
+                if total_bytes > MAX_SESSION_BYTES:
+                    raise ValidationFailure("Codex session exceeds maximum file size")
+                digest.update(raw)
+                content.extend(raw)
+                if not raw.strip():
+                    continue
+                try:
+                    item = json.loads(raw)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ValidationFailure(f"Invalid Codex JSON at line {line_number}") from exc
+                if not isinstance(item, dict) or not isinstance(item.get("payload"), dict):
+                    raise ValidationFailure("Codex records require type and payload objects")
+                kind = item.get("type")
+                data = item["payload"]
+                if kind == "session_meta":
+                    candidate = data.get("session_id", data.get("id"))
+                    if not isinstance(candidate, str) or not candidate.strip():
+                        raise ValidationFailure("Codex session_meta is missing session identity")
+                    candidate = candidate.strip()
+                    if session_id is None:
+                        session_id = candidate
+                    elif session_id != candidate:
+                        raise ValidationFailure("Conflicting Codex session identities")
+                elif kind == "event_msg" and data.get("type") == "user_message":
+                    saw_user |= isinstance(data.get("message"), str) and bool(
+                        data["message"].strip()
+                    )
+                elif kind == "event_msg" and data.get("type") == "agent_message":
+                    saw_assistant |= isinstance(data.get("message"), str) and bool(
+                        data["message"].strip()
+                    )
+                elif kind == "response_item" and data.get("type") == "message":
+                    role = data.get("role")
+                    blocks = data.get("content")
+                    meaningful = isinstance(blocks, list) and any(
+                        isinstance(block, dict)
+                        and block.get("type") in {"input_text", "output_text", "text"}
+                        and isinstance(block.get("text"), str)
+                        and bool(block["text"].strip())
+                        for block in blocks
+                    )
+                    if role == "user":
+                        saw_user |= meaningful
+                    elif role == "assistant":
+                        saw_assistant |= meaningful
+    except OSError as exc:
+        raise ValidationFailure("Codex session file is not readable") from exc
+    if session_id is None:
+        raise ValidationFailure("Codex rollout requires session_meta identity")
+    if not (saw_user and saw_assistant):
+        raise ValidationFailure("Codex rollout requires meaningful user and assistant text")
+    return session_id, digest.hexdigest(), bytes(content)
+
+
+_AGENT_VALIDATORS["codex"] = _validate_codex

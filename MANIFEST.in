@@ -6,3 +6,7 @@ recursive-include src/tgv py.typed
 
 recursive-include demo *
 recursive-include src/tgv/demo_assets *
+
+# Never ship interpreter caches generated inside bundled demo repositories.
+global-exclude *.py[cod] *.pyo
+prune **/__pycache__

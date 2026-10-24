@@ -1,6 +1,6 @@
 # Production Operations
 
-TGV 0.32's stdio daemon is intended to run behind a local process supervisor or an integration that owns stdin/stdout. It is a production-candidate local component, not an authenticated public network service or sandbox.
+TGV 0.39's stdio daemon is intended to run behind a local process supervisor or an integration that owns stdin/stdout. It is a production-candidate local component, not an authenticated public network service or sandbox.
 
 ## Recommended invocation
 
@@ -76,7 +76,7 @@ The outcome benchmark is repository-scoped and reports verified success, accepta
 
 ## Local state permissions
 
-On POSIX-compatible filesystems, TGV 0.32 uses owner-only permissions for atomic status/metrics files, repository indexes, telemetry session files, generated context bundles, and the SQLite outcome database where supported. These defaults reduce accidental disclosure but do not replace OS account separation, directory ACLs, encrypted storage, or backup policy.
+On POSIX-compatible filesystems, TGV 0.39 uses owner-only permissions for atomic status/metrics files, repository indexes, telemetry session files, generated context bundles, and the SQLite outcome database where supported. These defaults reduce accidental disclosure but do not replace OS account separation, directory ACLs, encrypted storage, or backup policy.
 
 Run TGV under a dedicated service account when multiple users share a host. Prefer environment variables for provider secrets and keep command-line credentials out of process listings and shell history.
 

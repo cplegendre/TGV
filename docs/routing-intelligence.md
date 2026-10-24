@@ -66,7 +66,8 @@ does not store raw transcript contents or classified spans, and identical links 
 The locator is retained so linked TER analysis can revalidate the same file; treat it as sensitive
 path metadata. `outcomes validate` records user-attested positive or negative test and static-analysis
 results without executing them and without changing the existing verified-success semantics.
-Only the `claude-code` session format is currently supported. See
+Claude Code is the only TER 3.0.0 scoring format. Codex `rollout-*.jsonl` sessions may be linked
+and validated, but linked Codex scoring fails closed until TER ships a verified loader. See
 [linking and measurement](tgv-ter-workflow.md#6-link-the-real-session-to-the-outcome-task).
 
 ## Benchmark scope
@@ -75,7 +76,7 @@ The integrated benchmark reports category accuracy, complexity-band accuracy, ac
 
 ## Integrated release benchmark
 
-TGV 0.32 ships 104 curated synthetic cases across all 13 task categories and low/medium/high complexity bands. `tgv benchmark run --enforce --json` applies the release gate used by CI: at least 100 cases, at least 90% task-category accuracy, at least 90% complexity-band accuracy, at least 95% acceptable-route accuracy, and zero false-low-risk cases. The corpus is a regression/evaluation set, not evidence of universal production accuracy.
+TGV 0.39 ships 104 curated synthetic cases across all 13 task categories and low/medium/high complexity bands. `tgv benchmark run --enforce --json` applies the release gate used by CI: at least 100 cases, at least 90% task-category accuracy, at least 90% complexity-band accuracy, at least 95% acceptable-route accuracy, and zero false-low-risk cases. The corpus is a regression/evaluation set, not evidence of universal production accuracy.
 
 
 ## Observed outcome benchmark

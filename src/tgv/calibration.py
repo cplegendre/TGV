@@ -136,6 +136,13 @@ def _selected_entries(
     ]
 
 
+def _aggregate_count(aggregate: dict[str, Any] | None, name: str) -> int:
+    value = aggregate.get(name) if aggregate is not None else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return int(value)
+
+
 def _proposal_for(
     route: Route,
     threshold_name: str,
@@ -163,9 +170,9 @@ def _proposal_for(
         and lower_bound >= SUCCESS_FLOOR
     )
     aggregate = _aggregate(entries) if entries else None
-    total_tokens = int(aggregate["total_tokens"]) if aggregate is not None else 0
-    waste_tokens = int(aggregate["waste_tokens"]) if aggregate is not None else 0
-    waste_ratio = (waste_tokens / total_tokens if total_tokens else 0.0) if entries else None
+    total_tokens = _aggregate_count(aggregate, "total_tokens")
+    waste_tokens = _aggregate_count(aggregate, "waste_tokens")
+    waste_ratio = waste_tokens / total_tokens if total_tokens else None
     analyzer, analyzer_version = selected_scope if selected_scope is not None else (None, None)
     supported_analyzer = (analyzer, analyzer_version) == (
         SUPPORTED_ANALYZER,
@@ -178,7 +185,11 @@ def _proposal_for(
             f"{verified_outcomes} verified outcomes is below the required "
             f"{MINIMUM_VERIFIED_OUTCOMES}; no change proposed."
         )
-    elif len(entries) < MINIMUM_MEASURED_SESSIONS or paired_tasks < MINIMUM_PAIRED_TASKS:
+    elif (
+        len(entries) < MINIMUM_MEASURED_SESSIONS
+        or paired_tasks < MINIMUM_PAIRED_TASKS
+        or total_tokens == 0
+    ):
         status = "efficiency-evidence-missing"
         rationale = (
             f"Comparable evidence has {len(entries)} measured sessions across "
@@ -245,9 +256,13 @@ def _proposal_for(
             "uses_wilson_lower_bound": True,
         },
         efficiency_measurement_count=len(entries),
-        aggregate_ter=(float(aggregate["aggregate_ter"]) if aggregate is not None else None),
+        aggregate_ter=(
+            float(aggregate["aggregate_ter"])
+            if aggregate is not None and aggregate["aggregate_ter"] is not None
+            else None
+        ),
         waste_ratio=round(waste_ratio, 4) if waste_ratio is not None else None,
-        aligned_tokens=int(aggregate["aligned_tokens"]) if aggregate is not None else 0,
+        aligned_tokens=_aggregate_count(aggregate, "aligned_tokens"),
         waste_tokens=waste_tokens,
         total_tokens=total_tokens,
         analyzer=analyzer,

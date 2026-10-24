@@ -14,7 +14,7 @@ The report includes exact accuracy, acceptable-route accuracy, a confusion matri
 
 ## Integrated routing-intelligence benchmark
 
-Run `tgv benchmark run --enforce --json` to evaluate task categorization, complexity bands, deterministic route acceptability, and false-low-risk behavior together. TGV 0.32 commits 104 curated synthetic cases covering all 13 task categories, with 32 low-, 56 medium-, and 16 high-complexity cases.
+Run `tgv benchmark run --enforce --json` to evaluate task categorization, complexity bands, deterministic route acceptability, and false-low-risk behavior together. TGV 0.39 commits 104 curated synthetic cases covering all 13 task categories, with 32 low-, 56 medium-, and 16 high-complexity cases.
 
 The release gate requires at least 100 cases, 90% task-category accuracy, 90% complexity-band accuracy, 95% acceptable-route accuracy, and a 0% false-low-risk rate. CI enforces the gate. These cases are intentionally broader than the 76-case low-level deterministic routing corpus, but remain a regression corpus rather than a claim about all real-world repositories or tasks.
 

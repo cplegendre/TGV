@@ -48,3 +48,7 @@ class ConflictingMeasurementError(OutcomeCorrelationError):
 
 class LedgerReadError(TGVError):
     """Raised when a ledger cannot be opened safely in read-only mode."""
+
+
+class LedgerWriteError(TGVError):
+    """Raised when an outcome-ledger write cannot be completed safely."""

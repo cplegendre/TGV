@@ -24,6 +24,7 @@ def test_efficiency_grouping() -> None:
     )
     assert report["local_fast"] == {
         "aggregate_ter": 0.7333,
+        "efficiency_status": "measured",
         "aligned_tokens": 110,
         "waste_tokens": 40,
         "session_count": 2,
@@ -48,6 +49,19 @@ def test_efficiency_cli_json(
     main(["efficiency", "--format", "json"])
     output = json.loads(capsys.readouterr().out)
     assert output["local_fast"]["aggregate_ter"] == 0.8
+
+
+def test_efficiency_cli_text_handles_zero_token_evidence(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        "tgv.cli.score_sessions",
+        lambda _: [ScoredSession("local_fast", 1.0, 0, 0)],
+    )
+    main(["efficiency"])
+    output = capsys.readouterr().out
+    assert "n/a" in output
+    assert "1.0000" not in output
 
 
 def test_efficiency_missing_ter_executable_is_actionable(

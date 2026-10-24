@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.check_packaging_cleanliness import find_offenders
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # NOTE: __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, and
@@ -31,3 +33,11 @@ def test_no_temp_or_scratch_files_present() -> None:
         if p.is_file() and p.name.endswith(_FORBIDDEN_FILE_SUFFIXES)
     ]
     assert offenders == [], f"Temp/scratch files found in source tree: {offenders}"
+
+
+def test_packaging_check_ignores_virtualenv_but_flags_scratch_files(tmp_path: Path) -> None:
+    cache = tmp_path / ".venv" / "lib" / "__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "module.pyc").write_bytes(b"")
+    (tmp_path / "scratch.tmp").write_text("x")
+    assert find_offenders(tmp_path) == ["scratch.tmp"]

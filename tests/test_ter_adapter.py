@@ -110,9 +110,7 @@ def test_inconsistent_total_tokens_are_rejected(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("aggregate_ter", [-0.1, 1.1])
-def test_out_of_range_aggregate_ter_is_rejected(
-    tmp_path: Path, aggregate_ter: float
-) -> None:
+def test_out_of_range_aggregate_ter_is_rejected(tmp_path: Path, aggregate_ter: float) -> None:
     payload = _payload(aggregate_ter=aggregate_ter)
     script = _fake_ter(tmp_path, _emit(payload))
 
@@ -127,6 +125,13 @@ def test_unsupported_ter_version_is_rejected(tmp_path: Path) -> None:
         _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
 
 
+def test_ter_major_version_is_rejected(tmp_path: Path) -> None:
+    script = _fake_ter(tmp_path, _emit(_payload()), version="4.0.0")
+
+    with pytest.raises(TERAnalysisError, match=r"Unsupported TER CLI version 4\.0\.0"):
+        _ter_analyzer(executable=str(script), timeout=5)(_session(tmp_path))
+
+
 def test_unrecognized_ter_version_output_is_rejected(tmp_path: Path) -> None:
     script = _fake_ter(tmp_path, _emit(_payload()), version="unknown")
 
@@ -137,10 +142,7 @@ def test_unrecognized_ter_version_output_is_rejected(tmp_path: Path) -> None:
 def test_ter_version_command_failure_is_actionable(tmp_path: Path) -> None:
     script = tmp_path / "fake-ter"
     script.write_text(
-        f"#!{sys.executable}\n"
-        "import sys\n"
-        "sys.stderr.write('bad version')\n"
-        "sys.exit(8)\n",
+        f"#!{sys.executable}\nimport sys\nsys.stderr.write('bad version')\nsys.exit(8)\n",
         encoding="utf-8",
     )
     script.chmod(0o755)
@@ -196,9 +198,7 @@ def test_analysis_executable_disappearance_after_version_check_is_wrapped(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0"
-    )
+    monkeypatch.setattr("tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0")
     analyzer = _ter_analyzer(executable=str(tmp_path / "missing-ter"), timeout=5)
 
     with pytest.raises(TERUnavailableError, match="tgv-agent\\[ter\\]"):
@@ -209,9 +209,7 @@ def test_analysis_start_failure_after_version_check_is_wrapped(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0"
-    )
+    monkeypatch.setattr("tgv.efficiency._detect_ter_version", lambda _executable, _timeout: "3.0.0")
 
     def fail_run(*args: object, **kwargs: object) -> object:
         raise OSError("denied")

@@ -194,6 +194,53 @@ def test_report_linked_missing_ledger_is_empty_and_documented(
     assert not (repo / ".tgv").exists()
 
 
+def test_linked_report_text_renders_zero_token_aggregate_as_unavailable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path)
+    task_id = _verified_task(repo, tmp_path, measured=False)
+    ledger = _ledger(repo)
+    attempt = ledger.execution_attempts(task_id)[0]
+    link = ledger.agent_sessions(attempt.attempt_id)[0]
+    _update(
+        repo,
+        "INSERT INTO ter_measurements "
+        "(measurement_id, attempt_id, session_link_id, analyzer, analyzer_version, "
+        "measured_at, metrics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            "legacy-zero-token",
+            attempt.attempt_id,
+            link.session_link_id,
+            "TER CLI",
+            "3.0.0",
+            datetime.now(UTC).isoformat(),
+            json.dumps({"aggregate_ter": 1.0, "aligned_tokens": 0, "waste_tokens": 0}),
+        ),
+    )
+    code, out, err = _run(capsys, ["report", "--linked", "--repo", str(repo)])
+    assert code == 0, err
+    assert "n/a" in out
+    assert "0.0000" not in out
+
+
+def test_outcomes_read_commands_do_not_create_or_mutate_ledger(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path)
+    for action in ("list", "export"):
+        code, _, err = _run(capsys, ["outcomes", action, "--repo", str(repo), "--format", "json"])
+        assert code == 0, err
+        assert not (repo / ".tgv").exists()
+
+    _verified_task(repo, tmp_path)
+    before = _snapshot(repo)
+    for action in ("list", "export"):
+        code, out, err = _run(capsys, ["outcomes", action, "--repo", str(repo), "--format", "json"])
+        assert code == 0, err
+        assert json.loads(out)
+    assert _snapshot(repo) == before
+
+
 def test_empty_existing_ledger_reports_zeros_without_migration(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
