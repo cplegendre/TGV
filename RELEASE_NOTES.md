@@ -5,7 +5,14 @@ Phase 3 adds opt-in replacement of unmeasured session links (PR-16), release-doc
 The v0.39 review pass fixed two measurement-integrity defects: legacy zero-token route
 aggregation no longer reports perfect TER or permits threshold lowering, and text-mode linked
 reports render unavailable TER safely. `outcomes list` and `outcomes export` no longer create a
-missing ledger. Full verification results and remaining limitations are in `docs/CODEX_AUDIT.md`,
+missing ledger.
+
+The final release-hardening pass makes `outcomes complete` atomic across task status, human
+feedback, and pending-attempt closure. Execution-attempt updates now enforce explicit lifecycle
+transitions while preserving historical statuses and retry workflows. Public TER measurement
+writes reject zero-token, negative, non-integral, inconsistent-total, non-finite, and out-of-range
+values before persistence; existing historical rows remain readable and are not rewritten.
+Full verification results and remaining limitations are in `docs/CODEX_AUDIT.md`,
 `docs/PR10_PR19_REVIEW.md`, and `docs/GITHUB_RELEASE_CHECKLIST.md`.
 
 Phase 2 integrates PR-15 (TGV half of a versioned TER JSON contract), PR-14 (Codex linking), and guards for PR-13 (TER-side Codex loader, **not included**).

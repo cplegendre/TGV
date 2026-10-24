@@ -365,7 +365,12 @@ def test_low_waste_does_not_justify_threshold_lowering(tmp_path: Path) -> None:
 
 def test_zero_token_sessions_report_insufficient_evidence(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    _evidence(repo, 40, success=True, aligned=0, waste=0)
+    _evidence(repo, 40, success=True, aligned=1, waste=1)
+    with sqlite3.connect(_ledger(repo).path) as connection:
+        connection.execute(
+            "UPDATE ter_measurements SET metrics = ?",
+            (json.dumps({"aggregate_ter": 1.0, "aligned_tokens": 0, "waste_tokens": 0}),),
+        )
     report = _report(repo, _config_path(tmp_path))
     proposal = _proposal(report, "local_code")
 

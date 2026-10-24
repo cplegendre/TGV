@@ -221,7 +221,9 @@ Add `--config "$TGV_CONFIG"` when using a configuration file. Linked mode revali
 file and its SHA-256 fingerprint, writes the validated bytes to an owner-only temporary snapshot,
 checks TER's version, requires TER's returned `session_id` to match the linked session, and commits
 all measurements in one SQLite transaction. The temporary snapshot is removed after success or
-failure.
+failure. New measurement writes also reject zero-token evidence, negative or non-integral token
+counts, inconsistent totals, non-finite TER, and TER outside `[0, 1]` at the ledger boundary, so a
+caller cannot bypass measurement integrity. Historical rows remain readable and are not rewritten.
 
 Use `--linked` for real agent sessions. `tgv efficiency --sessions PATH` scores the JSONL files
 in `PATH`; pointing it at TGV's telemetry measures synthetic routing narration, not agent

@@ -66,7 +66,8 @@ does not store raw transcript contents or classified spans, and identical links 
 The locator is retained so linked TER analysis can revalidate the same file; treat it as sensitive
 path metadata. `outcomes validate` records user-attested positive or negative test and static-analysis
 results without executing them and without changing the existing verified-success semantics.
-Only the `claude-code` session format is currently supported. See
+Claude Code is the only TER 3.0.0 scoring format. Codex `rollout-*.jsonl` sessions may be linked
+and validated, but linked Codex scoring fails closed until TER ships a verified loader. See
 [linking and measurement](tgv-ter-workflow.md#6-link-the-real-session-to-the-outcome-task).
 
 ## Benchmark scope

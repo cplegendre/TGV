@@ -34,6 +34,15 @@ python -m pytest -q
 
 Expected: full pass and coverage at or above the configured 98% gate.
 
+Run the release-hardening regressions directly when changing ledger behavior:
+
+```bash
+python -m pytest -q tests/test_release_hardening.py --no-cov
+```
+
+This covers atomic outcome rollback, attempt transition enforcement, and
+persistence-level TER validation.
+
 If the loopback HTTP test fails with `PermissionError: Operation not
 permitted`, run it outside the restricted sandbox:
 
@@ -68,9 +77,11 @@ Inspect artifacts:
 ```bash
 tar tzf dist/tgv_agent-0.39.tar.gz | grep -E '__pycache__|\.pyc$' && echo FAIL || echo OK
 unzip -l dist/tgv_agent-0.39-py3-none-any.whl | grep -E '__pycache__|\.pyc$' && echo FAIL || echo OK
+tar tzf dist/tgv_agent-0.39.tar.gz | grep -E '(^|/)\.venv/|\.sqlite3?$|\.db$|\.env$|\.pem$|\.key$' && echo FAIL || echo OK
+unzip -l dist/tgv_agent-0.39-py3-none-any.whl | grep -E '(^|/)\.venv/|\.sqlite3?$|\.db$|\.env$|\.pem$|\.key$' && echo FAIL || echo OK
 ```
 
-Both inspections must report `OK`. Optionally install `check-wheel-contents`
+All inspections must report `OK`. Optionally install `check-wheel-contents`
 and run it against the wheel.
 
 ## 6. Smoke and security checks
@@ -120,7 +131,8 @@ virtualenvs, local outcome ledgers, backups, or generated transcripts.
 
 - **Review branch:** safe once local gates pass and a human reviews the diff.
 - **Merge to `main`:** requires green CI across the supported Python versions
-  and a decision on the remaining P2 attempt-atomicity limitation.
+  and human review. Atomic completion, lifecycle validation, and persistence
+  measurement validation are no longer blockers.
 - **Versioned GitHub release:** requires the above plus resolution or explicit
   acceptance of TER producer/Codex gaps and the remaining PR-18 items.
 

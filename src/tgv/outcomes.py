@@ -22,6 +22,7 @@ from tgv.exceptions import (
     CorrelationMismatchError,
     CrossRepositoryError,
     LedgerReadError,
+    LedgerWriteError,
 )
 from tgv.models import (
     AgentSessionLink,
@@ -38,6 +39,15 @@ _SCHEMA_VERSION = 3
 _CONTENT_HASH = re.compile(r"^[0-9a-f]{64}$")
 _ROW_DECODE_ERRORS = (KeyError, IndexError, TypeError, ValueError)
 _RowT = TypeVar("_RowT")
+
+ATTEMPT_STATUSES = frozenset({"pending", "running", "completed", "failed"})
+_ATTEMPT_TRANSITIONS: dict[str, frozenset[str]] = {
+    "pending": frozenset({"running", "completed", "failed"}),
+    "running": frozenset({"completed", "failed"}),
+    "completed": frozenset({"completed"}),
+    "failed": frozenset({"failed"}),
+}
+_TER_METRIC_FIELDS = frozenset({"aggregate_ter", "aligned_tokens", "waste_tokens", "total_tokens"})
 
 _INVALID_RECORD_POLICY = (
     "unreadable records are quarantined with their dependent attempts, sessions, and "
@@ -134,6 +144,32 @@ def _normalize_session_link(
     return agent_name, session_id, normalized_hash, normalized_path
 
 
+def _normalize_attempt_status(status: str, *, current: str | None = None) -> str:
+    normalized = status.strip()
+    if not normalized:
+        raise ValueError("Execution attempt status must not be empty")
+    if normalized not in ATTEMPT_STATUSES:
+        supported = ", ".join(sorted(ATTEMPT_STATUSES))
+        raise ValueError(
+            f"Unsupported execution attempt status {normalized!r}; expected one of: {supported}"
+        )
+    if current is None or normalized == current:
+        return normalized
+    allowed = _ATTEMPT_TRANSITIONS.get(current)
+    if allowed is None:
+        raise ValueError(
+            f"Execution attempt has unsupported historical status {current!r}; "
+            "refusing an automatic status change"
+        )
+    if normalized not in allowed:
+        allowed_text = ", ".join(sorted(allowed))
+        raise ValueError(
+            f"Invalid execution attempt transition {current!r} -> {normalized!r}; "
+            f"allowed from {current!r}: {allowed_text}"
+        )
+    return normalized
+
+
 class OutcomeLedger:
     """Privacy-minimal SQLite outcome store with transactional schema initialization."""
 
@@ -151,13 +187,17 @@ class OutcomeLedger:
             return self._connect_read_only()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=5.0)
-        with suppress(OSError):
-            os.chmod(self.path, 0o600)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout = 5000")
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute("PRAGMA foreign_keys = ON")
-        self._initialize(connection)
+        try:
+            with suppress(OSError):
+                os.chmod(self.path, 0o600)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout = 5000")
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA foreign_keys = ON")
+            self._initialize(connection)
+        except BaseException:
+            connection.close()
+            raise
         return connection
 
     @property
@@ -529,6 +569,75 @@ class OutcomeLedger:
     ) -> None:
         self._update(task_id, human_accepted=accepted, rework_required=rework_required)
 
+    def complete_outcome(
+        self,
+        task_id: str,
+        *,
+        accepted: bool,
+        expected_repository_id: str | None = None,
+    ) -> int:
+        """Complete a task and close its pending attempts in one transaction.
+
+        The task status, human feedback, and pending-attempt lifecycle are committed
+        together. Any validation or database failure rolls back every write.
+        """
+        try:
+            connection = self._connect()
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as exc:
+            raise LedgerWriteError("Outcome ledger cannot be opened for completion") from exc
+
+        with closing(connection):
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                task = connection.execute(
+                    "SELECT repository_id FROM outcomes WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if task is None:
+                    raise KeyError(f"Unknown task id: {task_id}")
+                repository_id = str(task["repository_id"])
+                if expected_repository_id is not None and expected_repository_id != repository_id:
+                    raise CrossRepositoryError(
+                        "Task repository does not match the current repository"
+                    )
+
+                attempts = connection.execute(
+                    "SELECT task_id, repository_id FROM execution_attempts WHERE task_id = ?",
+                    (task_id,),
+                ).fetchall()
+                if any(
+                    row["task_id"] != task_id or row["repository_id"] != repository_id
+                    for row in attempts
+                ):
+                    raise CorrelationMismatchError(
+                        "Execution attempt correlation does not match its outcome task"
+                    )
+
+                cursor = connection.execute(
+                    "UPDATE outcomes SET execution_status = ? WHERE task_id = ?",
+                    ("completed", task_id),
+                )
+                if cursor.rowcount == 0:
+                    raise KeyError(f"Unknown task id: {task_id}")
+                connection.execute(
+                    "UPDATE outcomes SET human_accepted = ?, rework_required = ? WHERE task_id = ?",
+                    (int(accepted), int(not accepted), task_id),
+                )
+                completed_at = datetime.now(UTC).isoformat()
+                cursor = connection.execute(
+                    "UPDATE execution_attempts SET status = 'completed', completed_at = ? "
+                    "WHERE task_id = ? AND status = 'pending'",
+                    (completed_at, task_id),
+                )
+                completed_attempts = cursor.rowcount
+                connection.commit()
+            except sqlite3.Error as exc:
+                connection.rollback()
+                raise LedgerWriteError("Outcome completion failed and was rolled back") from exc
+            except BaseException:
+                connection.rollback()
+                raise
+        return completed_attempts
+
     def record_retry(self, task_id: str, *, escalated: bool = False) -> None:
         with closing(self._connect()) as connection, connection:
             connection.execute(
@@ -595,8 +704,7 @@ class OutcomeLedger:
         status: str = "pending",
     ) -> ExecutionAttempt:
         """Create the next execution attempt for an existing task."""
-        if not status.strip():
-            raise ValueError("Execution attempt status must not be empty")
+        status = _normalize_attempt_status(status)
         last_error: sqlite3.IntegrityError | None = None
         for _ in range(3):
             try:
@@ -706,22 +814,32 @@ class OutcomeLedger:
         completed_at: datetime | None = None,
     ) -> None:
         """Record a new status for an existing execution attempt."""
-        if not status.strip():
-            raise ValueError("Execution attempt status must not be empty")
-        with closing(self._connect()) as connection, connection:
-            if completed_at is None:
-                cursor = connection.execute(
-                    "UPDATE execution_attempts SET status = ? WHERE attempt_id = ?",
-                    (status.strip(), attempt_id),
-                )
-            else:
-                cursor = connection.execute(
-                    "UPDATE execution_attempts SET status = ?, completed_at = ? "
-                    "WHERE attempt_id = ?",
-                    (status.strip(), completed_at.isoformat(), attempt_id),
-                )
-            if cursor.rowcount == 0:
-                raise KeyError(f"Unknown attempt id: {attempt_id}")
+        requested = _normalize_attempt_status(status)
+        with closing(self._connect()) as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT status FROM execution_attempts WHERE attempt_id = ?", (attempt_id,)
+                ).fetchone()
+                if row is None:
+                    raise KeyError(f"Unknown attempt id: {attempt_id}")
+                current = str(row["status"])
+                normalized = _normalize_attempt_status(requested, current=current)
+                if completed_at is None:
+                    connection.execute(
+                        "UPDATE execution_attempts SET status = ? WHERE attempt_id = ?",
+                        (normalized, attempt_id),
+                    )
+                else:
+                    connection.execute(
+                        "UPDATE execution_attempts SET status = ?, completed_at = ? "
+                        "WHERE attempt_id = ?",
+                        (normalized, completed_at.isoformat(), attempt_id),
+                    )
+                connection.commit()
+            except BaseException:
+                connection.rollback()
+                raise
 
     def link_agent_session(
         self,
@@ -1245,6 +1363,42 @@ class OutcomeLedger:
             if isinstance(value, float) and not math.isfinite(value):
                 raise ValueError(f"Metric {key!r} must be a finite number or null")
             normalized[key] = value
+
+        ter_fields = _TER_METRIC_FIELDS.intersection(normalized)
+        if not ter_fields:
+            return dict(sorted(normalized.items()))
+
+        required = {"aggregate_ter", "aligned_tokens", "waste_tokens"}
+        missing = sorted(required - ter_fields)
+        if missing:
+            raise ValueError(
+                "TER measurements must include aggregate_ter, aligned_tokens, and "
+                "waste_tokens; missing: " + ", ".join(missing)
+            )
+
+        aligned = normalized["aligned_tokens"]
+        waste = normalized["waste_tokens"]
+        aggregate = normalized["aggregate_ter"]
+        if isinstance(aligned, bool) or not isinstance(aligned, int) or aligned < 0:
+            raise ValueError("TER metric 'aligned_tokens' must be a non-negative integer")
+        if isinstance(waste, bool) or not isinstance(waste, int) or waste < 0:
+            raise ValueError("TER metric 'waste_tokens' must be a non-negative integer")
+        if (
+            isinstance(aggregate, bool)
+            or not isinstance(aggregate, (int, float))
+            or (isinstance(aggregate, float) and not math.isfinite(aggregate))
+            or not 0 <= aggregate <= 1
+        ):
+            raise ValueError("TER metric 'aggregate_ter' must be a finite value between 0 and 1")
+
+        if "total_tokens" in normalized:
+            total = normalized["total_tokens"]
+            if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+                raise ValueError("TER metric 'total_tokens' must be a non-negative integer")
+            if total != aligned + waste:
+                raise ValueError("TER metric 'total_tokens' must equal aligned plus waste tokens")
+        if aligned + waste == 0:
+            raise ValueError("TER measurement must contain positive token evidence")
         return dict(sorted(normalized.items()))
 
     def execution_attempts(self, task_id: str) -> list[ExecutionAttempt]:

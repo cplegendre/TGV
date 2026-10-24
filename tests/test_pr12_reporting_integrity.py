@@ -202,12 +202,20 @@ def test_linked_report_text_renders_zero_token_aggregate_as_unavailable(
     ledger = _ledger(repo)
     attempt = ledger.execution_attempts(task_id)[0]
     link = ledger.agent_sessions(attempt.attempt_id)[0]
-    ledger.record_ter_measurement(
-        attempt.attempt_id,
-        analyzer="TER CLI",
-        analyzer_version="3.0.0",
-        metrics={"aggregate_ter": 1.0, "aligned_tokens": 0, "waste_tokens": 0},
-        session_link_id=link.session_link_id,
+    _update(
+        repo,
+        "INSERT INTO ter_measurements "
+        "(measurement_id, attempt_id, session_link_id, analyzer, analyzer_version, "
+        "measured_at, metrics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            "legacy-zero-token",
+            attempt.attempt_id,
+            link.session_link_id,
+            "TER CLI",
+            "3.0.0",
+            datetime.now(UTC).isoformat(),
+            json.dumps({"aggregate_ter": 1.0, "aligned_tokens": 0, "waste_tokens": 0}),
+        ),
     )
     code, out, err = _run(capsys, ["report", "--linked", "--repo", str(repo)])
     assert code == 0, err

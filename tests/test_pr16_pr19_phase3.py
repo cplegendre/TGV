@@ -55,7 +55,7 @@ def test_replace_unmeasured_preserves_link_and_rejects_measured(tmp_path: Path) 
         attempt.attempt_id,
         analyzer="TER CLI",
         analyzer_version="3.0.0",
-        metrics={"aggregate_ter": 0.5},
+        metrics={"aggregate_ter": 0.5, "aligned_tokens": 1, "waste_tokens": 1},
         session_link_id=linked.session_link_id,
     )
     with pytest.raises(ConflictingSessionLinkError, match="Measured"):

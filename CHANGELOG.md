@@ -9,6 +9,13 @@
 - Review: text reports render unavailable zero-token TER as `n/a` instead of failing formatting.
 - Review: Codex session linking and session-replacement guard coverage expanded; packaging check now
   evaluates the prospective archive file set and supports `--root`.
+- Hardening: `outcomes complete` now records task completion, human feedback, and pending-attempt
+  closure in one SQLite transaction and rolls back every write on failure.
+- Hardening: execution-attempt updates enforce explicit lifecycle transitions while preserving
+  unknown historical statuses and valid retry workflows.
+- Hardening: public TER measurement writes reject zero-token, negative, non-integral,
+  inconsistent-total, non-finite, and out-of-range values before persistence; historical records
+  remain readable and unchanged.
 
 ## [0.38] - 2026-10-25
 

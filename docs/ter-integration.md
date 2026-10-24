@@ -113,6 +113,11 @@ declaring `schema_version: 1`, compares the `session_id` returned by TER with th
 and rejects out-of-range or internally inconsistent aggregate token metrics. It persists only
 aggregate TER metrics in `ter_measurements`. It never scores TGV's synthetic telemetry.
 
+The ledger boundary independently rejects zero-token evidence, negative or non-integral token
+counts, inconsistent `total_tokens`, non-finite TER, and TER outside `[0, 1]`. This applies to
+direct `record_ter_measurement` callers as well as the linked CLI workflow. Historical rows remain
+readable and are not rewritten.
+
 All linked sessions are validated and analyzed before measurements are committed in one SQLite
 transaction. A TER failure or measurement conflict therefore rolls back the batch. Re-running an
 identical measurement is idempotent; conflicting analyzer results raise an error rather than

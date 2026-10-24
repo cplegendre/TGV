@@ -21,8 +21,12 @@ evidence calibration does not treat such populations as efficient.
 ## PR-11 — Attempt lifecycle
 `outcomes complete` now closes pending attempts for the task, assigning
 `completed_at` and status `completed`, while preserving non-pending statuses.
-This does not synthesize historical provenance for legacy attempts; historical
-pending attempts from earlier versions require separate explicit reconciliation.
+The final v0.39 hardening pass made task completion, human feedback, and
+pending-attempt closure one SQLite transaction, and added an explicit
+`pending -> running/completed/failed` lifecycle with idempotent terminal
+updates. This does not synthesize historical provenance for legacy attempts;
+historical pending attempts from earlier versions require separate explicit
+reconciliation, and unknown legacy statuses are never rewritten automatically.
 
 ## Compatibility and limitations
 - Previously accepted hollow Claude sessions are rejected.
@@ -32,7 +36,8 @@ pending attempts from earlier versions require separate explicit reconciliation.
 - The low-level `link_agent_session` API retains its historical conflict semantics.
 - The measurement schema and deterministic routing thresholds are unchanged.
 - No TER repository changes were made; TER itself may still return zero-token
-  results, which this TGV linked-measurement entry point now rejects.
+  results, which TGV now rejects before persistence on both the linked and
+  low-level measurement paths while retaining historical rows read-only.
 - Historical note: this phase was originally validated with focused tests only.
 
 ## Validation (v0.39 final)

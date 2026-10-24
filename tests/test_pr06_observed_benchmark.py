@@ -503,7 +503,22 @@ def test_zero_token_measurement_does_not_claim_perfect_efficiency(tmp_path: Path
     repo = _repo(tmp_path)
     task_id = _task(repo)
     result = _link(repo, task_id, _session(tmp_path / "session.jsonl"))
-    _measurement(repo, result, ter=1.0, aligned=0, waste=0)
+    database_path = repo / ".tgv" / "outcomes.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO ter_measurements "
+            "(measurement_id, attempt_id, session_link_id, analyzer, analyzer_version, "
+            "measured_at, metrics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                "legacy-zero-token",
+                result.attempt.attempt_id,
+                result.link.session_link_id,
+                "TER CLI",
+                "3.0.0",
+                datetime(2026, 1, 1, tzinfo=UTC).isoformat(),
+                json.dumps({"aggregate_ter": 1.0, "aligned_tokens": 0, "waste_tokens": 0}),
+            ),
+        )
     _complete(repo, task_id)
 
     report = observed_benchmark(_ledger(repo), repo)
@@ -953,13 +968,29 @@ def test_invalid_latest_measurement_does_not_displace_valid_historical_scope(
     task_id = _task(repo)
     result = _link(repo, task_id, _session(tmp_path / "session.jsonl"))
     valid = _measurement(repo, result, measured_at=datetime(2026, 1, 1, tzinfo=UTC))
-    _measurement(
-        repo,
-        result,
-        ter=1.1,
-        analyzer_version="3.0.1",
-        measured_at=datetime(2026, 1, 2, tzinfo=UTC),
-    )
+    database_path = repo / ".tgv" / "outcomes.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO ter_measurements "
+            "(measurement_id, attempt_id, session_link_id, analyzer, analyzer_version, "
+            "measured_at, metrics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                "legacy-invalid-ter",
+                result.attempt.attempt_id,
+                result.link.session_link_id,
+                "TER CLI",
+                "3.0.1",
+                datetime(2026, 1, 2, tzinfo=UTC).isoformat(),
+                json.dumps(
+                    {
+                        "aggregate_ter": 1.1,
+                        "aligned_tokens": 80,
+                        "waste_tokens": 20,
+                        "total_tokens": 100,
+                    }
+                ),
+            ),
+        )
     report = observed_benchmark(_ledger(repo), repo)
     assert report["coverage"]["invalid_measurement_count"] == 1
     assert report["coverage"]["selected_analyzer_version"] == "3.0.0"

@@ -782,11 +782,18 @@ def main(argv: list[str] | None = None) -> None:
                             "--accepted/--rejected"
                         )
                     accepted = bool(args.accepted)
-                    service.outcomes.record_execution(args.task_id, status="completed")
-                    service.outcomes.record_human_feedback(
-                        args.task_id, accepted=accepted, rework_required=not accepted
-                    )
-                    service.outcomes.complete_pending_attempts(args.task_id)
+                    if not service.outcomes.path.is_file():
+                        raise TGVError("Outcome ledger does not exist")
+                    try:
+                        service.outcomes.complete_outcome(
+                            args.task_id,
+                            accepted=accepted,
+                            expected_repository_id=service.outcomes.repository_id(
+                                service.repository.root
+                            ),
+                        )
+                    except KeyError as exc:
+                        raise TGVError(f"Unknown task id: {args.task_id}") from exc
                     print(
                         json.dumps(
                             {"task_id": args.task_id, "completed": True, "accepted": accepted}

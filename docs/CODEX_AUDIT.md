@@ -7,16 +7,16 @@ PR-10 through PR-19, the TGV/TER boundary, ledger integrity, read-only
 reporting, statistical diagnostics, documentation, packaging, and GitHub
 release readiness.
 
-The candidate is functionally testable and the local verification gates now
-pass. Three correctness defects were confirmed and fixed: legacy zero-token
-aggregation claimed perfect efficiency, text reporting could crash on a null
-linked TER value, and `outcomes list`/`outcomes export` created a missing
-ledger. Packaging also shipped demo-asset `__pycache__` files and reported a
-stale benchmark version; both were fixed.
+The final hardening pass closed three release-blocking ledger defects:
+`outcomes complete` is now one SQLite transaction, execution-attempt status
+transitions are validated at the persistence layer, and new TER measurements
+are validated before insertion. These changes do not alter routing thresholds,
+the outcome schema version, or the TGV/TER architectural boundary.
 
-No P0 issue remains. The remaining P1-class risk is external: the pinned TER
-3.0.0 producer does not emit `schema_version`, has no Codex loader, and has not
-been changed by this review. TGV correctly fails closed for Codex scoring.
+The local quality gates pass. No P0 issue remains. The remaining P1-class risk
+is external: the pinned TER 3.0.0 producer does not emit `schema_version`, has
+no Codex loader, and was not changed by this review. TGV correctly fails closed
+for Codex scoring and accepts unversioned output only from TER 3.0.0.
 
 ## Findings
 
@@ -25,104 +25,101 @@ been changed by this review. TGV correctly fails closed for Codex scoring.
 No data-loss, authentication bypass, remote-code-execution, or silent
 corruption issue was found that blocks all use.
 
-### P1 — release-relevant correctness and integrity
+### P1 — release blockers resolved in the final hardening pass
 
-1. **Legacy zero-token aggregation claimed perfect efficiency (fixed).**
-   `src/tgv/efficiency.py::aggregate_by_route` returned
-   `aggregate_ter: 1.0` for routes with zero aligned and waste tokens, and
-   `waste_ratio()` returned `0.0`. With enough sessions this could make
-   `propose_thresholds()` lower confidence thresholds on no evidence.
-   Reproduction: `aggregate_by_route([ScoredSession("local_fast", 0.2, 0, 0)])`.
-   Fix: zero-token routes now return `aggregate_ter: null` and
-   `efficiency_status: insufficient-token-evidence`; proposals use
-   `insufficient_data` and leave the threshold unchanged.
-   Regression tests: `tests/test_production_hardening.py`,
-   `tests/test_efficiency.py`.
+1. **Outcome completion was split across independent commits (fixed).**
+   `src/tgv/cli.py` previously called `record_execution`,
+   `record_human_feedback`, and `complete_pending_attempts` separately. A
+   failure between calls could leave a completed task with pending attempts or
+   feedback from only part of the operation.
+   Fix: `src/tgv/outcomes.py::OutcomeLedger.complete_outcome` validates the task,
+   repository correlation, and attempt correlation, then updates task status,
+   human feedback, and all pending attempts under one `BEGIN IMMEDIATE`
+   transaction. SQLite failures roll back every write and raise
+   `LedgerWriteError`. The CLI output and options are unchanged.
+   Regression tests: `tests/test_release_hardening.py`.
 
-2. **Linked text report crashed on null TER (fixed).**
-   `src/tgv/cli.py::_render_linked_report` formatted
-   `metrics["aggregate_ter"]` with `:.4f`. `_aggregate()` deliberately returns
-   `None` when total tokens are zero, so `tgv report --linked` (and
-   `efficiency --linked`) could raise `TypeError` in text mode.
-   Fix: render `n/a` for unavailable TER, including the legacy route table.
-   Regression test: `tests/test_pr12_reporting_integrity.py`.
+2. **Execution-attempt status changes were unrestricted (fixed).**
+   `update_execution_attempt` previously accepted any nonempty status string.
+   Fix: the ledger now defines `pending`, `running`, `completed`, and `failed`;
+   `pending` may move to `running`, `completed`, or `failed`, `running` may move
+   to `completed` or `failed`, and terminal states may only repeat themselves.
+   Unknown historical statuses are preserved and cannot be automatically
+   rewritten. Invalid transitions raise actionable `ValueError` messages before
+   an update is committed.
+   Regression tests: valid, repeated, invalid, terminal, retry, and legacy-status
+   cases in `tests/test_release_hardening.py`.
 
-3. **Read-only outcome inspection created a ledger (fixed).**
-   `outcomes list` and `outcomes export` entered `TGVService`, whose write-mode
-   `OutcomeLedger` initializes the database on first query. An isolated temp
-   repository gained `.tgv/outcomes.sqlite3` after merely listing outcomes.
-   Fix: both actions now use `OutcomeLedger(..., read_only=True)` before service
-   construction and return an empty export when the ledger is absent.
-   Regression test: `tests/test_pr12_reporting_integrity.py`.
+3. **Low-level TER writes could bypass measurement validation (fixed).**
+   `record_ter_measurement` and `record_ter_measurements` previously accepted
+   zero-token and internally inconsistent TER metrics even though linked
+   measurement rejected zero-token output.
+   Fix: `_normalize_metrics` validates every measurement batch before insertion.
+   Records containing TER fields must include `aggregate_ter`,
+   `aligned_tokens`, and `waste_tokens`; tokens must be non-negative integers;
+   `total_tokens`, when present, must equal aligned plus waste; zero-token
+   evidence is rejected; and finite TER must be in `[0, 1]`. Generic non-TER
+   metric metadata remains supported. Existing historical rows remain readable
+   and are never rewritten by this validation.
+   Regression tests: `tests/test_release_hardening.py`.
 
-### P2 — significant but non-blocking limitations
+### P1 — open external dependency
 
-4. **CLI `outcomes complete` is not one transaction (open).**
-   `src/tgv/cli.py` performs `record_execution`, `record_human_feedback`, then
-   `complete_pending_attempts` as three commits. A failure between steps can
-   leave a completed task with a still-pending attempt. The individual ledger
-   operations are atomic and idempotent; a ledger-level completion method would
-   close the gap.
+4. **TER producer compatibility is not confirmed.** TGV accepts unversioned
+   JSON only from TER 3.0.0 and versioned JSON with `schema_version: 1` from
+   other TER 3.x builds. The local TER checkout is version 3.0.0 and its
+   `src/ter_calculator/formatter_json.py::ter_result_to_dict` emits no
+   `schema_version`. The versioned branch is implemented and tested with
+   synthetic payloads, but cannot be verified end-to-end against the pinned
+   producer. TER's loader parses Claude Code sessions only; no Codex loader was
+   found. This is a TER-side dependency, not a TGV implementation gap.
 
-5. **`update_execution_attempt` accepts arbitrary statuses (open).**
-   `src/tgv/outcomes.py` validates only nonempty status. It does not enforce a
-   transition graph. This is a low-level API; high-level completion preserves
-   non-pending historical statuses.
+### P2 — significant non-blocking limitations
 
-6. **Calibration pairing is task-scoped, not attempt-scoped (open, PR-18).**
+5. **Calibration pairing is task-scoped, not attempt-scoped (open, PR-18).**
    `src/tgv/calibration.py` joins verified task outcomes with measurements by
    task ID. Repeated attempts are therefore not paired to the specific attempt
-   that produced a measurement. This is acknowledged in
+   that produced a measurement. This is documented in
    `PHASE3_IMPLEMENTATION.md` and `docs/model-routing.md`.
 
-7. **TER producer compatibility is not confirmed (open, TER-dependent).**
-   TGV accepts unversioned JSON only from TER 3.0.0 and versioned JSON with
-   `schema_version: 1` from other TER 3.x builds. The local TER checkout is
-   version 3.0.0 and its
-   `src/ter_calculator/formatter_json.py::ter_result_to_dict` emits no
-   `schema_version`. Thus TGV's versioned branch is implemented and tested with
-   synthetic payloads but cannot be verified end-to-end against the pinned
-   producer. TER's loader parses Claude Code sessions only; no Codex loader was
-   found.
-
-8. **Zero-token measurements can still be persisted through the low-level API (mitigated).**
-   `record_ter_measurement(s)` accepts `aligned_tokens=0, waste_tokens=0`.
-   The linked measurement path rejects such results before persistence, and
-   aggregates now report null TER, so evidence is not misinterpreted. The
-   low-level API is intentionally generic and should stay documented as such.
-
-9. **Bootstrap diagnostics are partial (open, PR-18).**
+6. **Bootstrap diagnostics are partial (open, PR-18).**
    `src/tgv/confidence.py::_bootstrap_intervals` provides deterministic
    task-level percentile intervals for overall Brier and ECE only. There are no
    grouped intervals or decision-source eligibility counts. Seed 0 and opt-in
    default behavior are correct, and bootstrap output never feeds routing.
 
-10. **The wheel shipped generated bytecode (fixed).**
-    `MANIFEST.in` recursively included `src/tgv/demo_assets`, which packaged
-    local `__pycache__/*.pyc` files. Fix: global exclusion of `*.py[cod]`,
-    `*.pyo`, and `__pycache__`. Rebuilt wheel and sdist contain zero bytecode
-    files.
+7. **Legacy zero-token history remains readable.** Historical malformed
+   measurements are quarantined from aggregation but intentionally preserved in
+   the ledger. This is the required compatibility behavior; new writes cannot
+   add such records through the public ledger API.
 
-### P3 — hygiene and documentation
+### P3 — hygiene and verification gaps
 
-11. **Benchmark metadata reported 0.32 (fixed).** `src/tgv/evaluation.py` now
-    uses `tgv.__version__`; a consistency test was added.
-12. **Documentation contained stale 0.32 claims (fixed).** README, SECURITY,
-    threat model, operations, model routing, benchmarks, routing intelligence,
-    TER integration, and the TER workflow now describe 0.39 behavior.
-13. **Packaging check scanned virtualenvs (fixed).** The script now checks the
-    prospective archive file set (git-tracked plus non-ignored files) and
-    supports `--root` for extracted archives.
-14. **CodeQL remains disabled (open decision).** Both
-    `.github/workflows/codeql.yml.backup` and `.github/workflows/codeql.yml.disabled`
-    are inactive. Enabling one is a repository security-policy decision.
-15. **Python 3.11 was not executed locally (verification gap).** The local
-    environment is Python 3.13.9. CI declares a 3.11/3.12/3.13 matrix, but this
-    session could not certify those interpreters.
-16. **ResourceWarnings for unclosed SQLite connections remain in tests (open,
-    low).** They do not fail the suite, but should be cleaned up.
-17. **No secrets were found.** A source/document scan found no private keys,
+8. **CodeQL remains disabled (open decision).** Both
+   `.github/workflows/codeql.yml.backup` and
+   `.github/workflows/codeql.yml.disabled` are inactive. Enabling one is a
+   repository security-policy decision.
+
+9. **Remote Python CI remains unverified.** The complete suite and configured
+   coverage gate pass locally on Python 3.11.15, 3.12.12, and 3.13.9. CI declares
+   the same 3.11/3.12/3.13 matrix, but this review cannot claim remote CI passed;
+   GitHub CLI authentication was unavailable.
+
+10. **ResourceWarnings for unclosed SQLite connections remain in tests (open,
+    low).** They do not fail the suite, but should be cleaned up in a focused
+    test-hygiene change.
+
+11. **No secrets were found.** A source/document scan found no private keys,
     tokens, or machine-specific absolute paths in tracked content.
+
+### Previously fixed in the v0.39 review
+
+- Legacy zero-token route aggregation no longer reports perfect TER or permits
+  threshold lowering.
+- Text-mode linked reports render unavailable TER as `n/a`.
+- `outcomes list` and `outcomes export` no longer create a missing ledger.
+- Packaging no longer includes generated `__pycache__`/bytecode files.
+- Benchmark metadata now follows the package version.
 
 ## TER-side recommendations (not applied)
 
@@ -139,33 +136,36 @@ These changes belong in the TER repository and were not made here:
 
 ## Verification evidence
 
-Run from `/home/legendre/Bureau/Codes/TGV` with Python 3.13.9:
+Run from the repository root:
 
-- Full suite: 582 passed, 2 skipped in 23.53s; coverage 98.03% (gate 98%).
-  The skips are the optional MCP and TER-extra integration tests because those
-  extras were not installed in the local review environment.
+- Python 3.13.9 full suite: 623 passed, 2 skipped in 35.97s; coverage 98.04%
+  (98% gate). The skips are optional MCP and TER-extra integration tests not
+  installed in the primary review environment.
+- Python 3.11.15 and 3.12.12 full suites: 624 passed, 1 skipped in 26.99s and
+  27.09s respectively. Configured coverage runs pass at 98.04%; the remaining
+  skip is the optional TER-extra integration test.
 - `ruff check .`: passes.
-- `ruff format --check .`: 123 files formatted.
+- `ruff format --check .`: 124 files formatted.
 - `mypy --strict src/tgv`: passes, 38 files.
 - `python scripts/check_version.py`: `0.39`.
 - `python scripts/check_packaging_cleanliness.py`: passes.
-- `python -m build --no-isolation`: builds sdist and wheel; no `.pyc` entries.
+- `python -m build --no-isolation`: builds sdist and wheel; no bytecode entries.
 - `bash scripts/smoke_test.sh`: passes.
 - `tgv bench routing --json`, `tgv bench index ...`, and
   `tgv benchmark run --enforce --json`: pass.
-- `pip-audit`: no known vulnerabilities after refreshing local tooling.
-
-The loopback HTTP integration test requires local socket binding. It fails in
-the restricted sandbox with `PermissionError` and passes outside it; this is an
-environment restriction, not a code failure.
+- `pip-audit --skip-editable`: no known vulnerabilities.
+- Wheel and sdist inspections exclude bytecode, virtual environments, SQLite
+  databases, credentials, and local environment files.
+- The loopback HTTP integration test passes outside the restricted sandbox. The
+  sandbox blocks local socket binding with `PermissionError`; this is an
+  environment restriction, not a source defect.
 
 ## Release-readiness assessment
 
 - Ready to push to a review branch: **yes**, after the changes in this working
   tree are reviewed and committed by a human.
-- Ready to merge to `main`: **conditionally**, subject to CI on Python
-  3.11-3.13 and resolution of the P2 attempt-atomicity question.
-- Ready for a versioned GitHub release: **not yet**. TER-side producer/Codex
-  work, Python-version CI evidence, and the remaining PR-18 items must be
-  resolved or explicitly accepted and documented.
-
+- Ready to merge to `main`: **conditionally**, subject to green CI on Python
+  3.11-3.13 and human review. Local suites pass on all three versions; the local
+  atomicity, lifecycle, and measurement blockers are resolved.
+- Ready for a versioned GitHub release: **conditionally**, after CI evidence and
+  explicit acceptance of the TER producer/Codex and remaining PR-18 limitations.
