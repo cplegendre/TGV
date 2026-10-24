@@ -35,7 +35,17 @@ Multiple local processes can contend on the SQLite outcome ledger. TGV uses WAL 
 
 ### External agent-session linking
 
-`tgv outcomes link` accepts an explicit session path because real coding-agent transcripts often live outside the repository. TGV rejects missing paths, directories, final-component symlinks, non-regular files, oversized files, malformed records, missing or inconsistent session identifiers, repository mismatches, and conflicting or changed links. It stores only the agent name, external session identifier, SHA-256 content hash, attempt correlation, and timestamps. It never stores the absolute session path or raw transcript contents. TGV does not discover sessions or scan home directories, and it validates only documented session formats.
+`tgv outcomes link` accepts an explicit session path because real coding-agent transcripts often
+live outside the repository. TGV rejects missing paths, directories, final-component symlinks,
+non-regular files, oversized files, malformed records, missing or inconsistent session identifiers,
+repository mismatches, and conflicting or changed links. It stores the agent name, external session
+identifier, SHA-256 content hash, attempt correlation, timestamps, and an **absolute session file
+locator**. Raw transcript contents, prompts, responses, and classified spans are not copied into the
+ledger. The locator is sensitive metadata because it can reveal usernames, project names, and
+directory structure; it is retained so later linked TER analysis can revalidate the exact file.
+TGV does not discover sessions or scan home directories, and it validates only documented session
+formats. Only `claude-code` JSONL is currently supported. See
+[TGV and TER end-to-end workflow](tgv-ter-workflow.md#persistence-and-privacy).
 
 Session files are opened by descriptor with `O_NOFOLLOW` where supported, and `fstat()` applies the regular-file and size checks to the opened object. Parent-directory symlinks are followed, only the final component is protected, platforms without `O_NOFOLLOW` retain a narrow pre-check race, and concurrent in-place file modification is not locked. The content hash reflects the bytes read from the opened descriptor rather than a stable snapshot guarantee.
 

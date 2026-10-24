@@ -5,6 +5,10 @@ analyze session JSONL files. The supported, repository-verified TER package is
 `ter-calculator` **3.0.0**, pinned to the Git tag `v3.0.0`. Manuscript tags `v4`
 and `v5` must not be treated as TER package releases without separate verification.
 
+For the complete install, route, link, verify, measure, report, calibrate, and confidence
+workflow, see [TGV and TER end-to-end workflow](tgv-ter-workflow.md). This page defines the
+public TER contract and its limitations.
+
 ## Install
 
 From a TGV checkout:
@@ -40,9 +44,9 @@ ter analyze /path/to/agent-session.jsonl --format json
 ```
 
 Check that the JSON result contains `session_id`, `aggregate_ter`,
-`aligned_tokens`, `waste_tokens`, and `total_tokens`. TGV's adapter currently
-consumes only `aggregate_ter`, `aligned_tokens`, and `waste_tokens`, and ignores
-extra fields such as `classified_spans`. This CLI JSON shape is protected by
+`aligned_tokens`, `waste_tokens`, and optionally `total_tokens`. TGV's adapter
+requires the first four fields, validates `total_tokens` when supplied, and ignores extra fields
+such as `classified_spans`. This CLI JSON shape is protected by
 TGV adapter tests but is not a guarantee of compatibility with future TER
 versions. A real smoke test requires a compatible session file and an available
 embedding model; fake-executable unit tests cannot establish that end-to-end
@@ -113,6 +117,8 @@ All linked sessions are validated and analyzed before measurements are committed
 transaction. A TER failure or measurement conflict therefore rolls back the batch. Re-running an
 identical measurement is idempotent; conflicting analyzer results raise an error rather than
 overwriting stored evidence. The `--linked` and `--sessions` options cannot be combined.
+See [steps 8–9 of the workflow](tgv-ter-workflow.md#8-analyze-execution-efficiency-with-ter) for
+the complete command sequence.
 
 View persisted measurements without invoking TER:
 
