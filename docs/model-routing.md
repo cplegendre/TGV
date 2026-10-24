@@ -15,6 +15,30 @@ High-risk matches remain a policy override. When `force_frontier_for_high_risk` 
 
 A configured local routing model may replace the deterministic result only when it clears the relevant confidence threshold. Provider errors fall back to deterministic routing.
 
+## Routing confidence semantics
+
+`RouteDecision.confidence` describes confidence in a routing choice; it is not an established
+probability that the task will pass verification. Deterministic routing uses route-specific
+heuristic constants (0.78 for `local_fast`, 0.72 for `local_code`, 0.64 for
+`frontier_standard`, and 0.55 for `frontier_deep`; high-risk routing uses 0.92).
+Accepted model suggestions use provider-reported confidence. These values have different
+origins and should not be interpreted as interchangeable success probabilities.
+
+Scoreboard recommendations and safety overrides can change the final route and selected
+model while retaining the baseline routing confidence. The scoreboard's candidate
+confidence and expected success probability are separate fields. The outcome ledger stores
+the routing decision's confidence, along with the authoritative final route and decision
+source when recorded; it does not reconstruct the origin of retained confidence.
+
+`tgv confidence --repo . --json` provides exploratory probability-style diagnostics using
+that persisted value and verified task outcomes. Overall statistics explicitly pool mixed
+populations; route, model, tier, source, category, and provenance groups help expose those
+differences. Historical missing or invalid provenance remains visible and is never inferred
+from capability tiers. Model and tier groups describe final selection, not confidence origin.
+The command does not change routing, confidence constants, scoreboard rankings, or PR-07
+application semantics. See [confidence diagnostics](benchmarks.md#confidence-diagnostics)
+for formulas, coverage denominators, and limitations.
+
 ## Capability profiles, not hard-coded models
 
 Routes do not identify vendors. Configuration maps each role to a provider, model, endpoint, and reasoning budget. This allows a team to replace an Ollama model or frontier API without changing routing policy.

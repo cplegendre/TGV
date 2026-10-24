@@ -14,6 +14,7 @@ from tgv.calibration import (
     evidence_calibration,
     render_evidence_calibration,
 )
+from tgv.confidence import confidence_report, render_confidence_report
 from tgv.config import load_config
 from tgv.efficiency import (
     aggregate_by_route,
@@ -140,6 +141,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibrate.add_argument("--format", choices=("text", "json"))
     calibrate.add_argument("--json", action="store_true")
+
+    confidence = sub.add_parser(
+        "confidence", help="Inspect persisted confidence and verified outcomes"
+    )
+    confidence.add_argument("--repo", type=_path, default=Path.cwd())
+    confidence.add_argument("--config", type=_path)
+    confidence.add_argument("--json", action="store_true")
 
     bench = sub.add_parser("bench", help="Run deterministic routing or index diagnostics")
     bench_sub = bench.add_subparsers(dest="benchmark", required=True)
@@ -318,6 +326,16 @@ def main(argv: list[str] | None = None) -> None:
         normalized.insert(0, "demo")
     args = parser.parse_args(normalized)
     try:
+        if args.command == "confidence":
+            report = confidence_report(
+                _outcome_ledger(args.repo, args.config, read_only=True), args.repo
+            )
+            print(
+                json.dumps(report, indent=2, sort_keys=True, allow_nan=False)
+                if args.json
+                else render_confidence_report(report)
+            )
+            return
         if args.command == "demo":
             from tqdm import tqdm
 

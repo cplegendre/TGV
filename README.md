@@ -305,6 +305,26 @@ The default is read-only. `--apply` remains explicit but cannot modify configura
 without a defensible eligible proposal; the current evidence engine emits none.
 See [model routing](docs/model-routing.md) for statistical and application limitations.
 
+### Inspect confidence diagnostics
+
+```bash
+tgv confidence --repo .
+tgv confidence --repo . --json
+```
+
+This read-only command compares persisted routing confidence with verified task outcomes.
+It reports Brier scores, expected calibration error (ECE), ten reliability bins with Wilson
+95% intervals, verification and confidence coverage, and route/model/tier/source breakdowns.
+Each task counts once, regardless of attempts or sessions; TER measurements are not required.
+Missing evidence remains visible, and scores are null when no verified task has valid confidence.
+
+Routing confidence is heuristic or provider-reported, not an established probability of
+success. Scores are exploratory, subject to verification and selection bias, and authorize
+no routing or threshold changes. The command reads the configured outcome database without
+creating or migrating it, executing agents, or invoking TER. See
+[confidence semantics](docs/model-routing.md#routing-confidence-semantics) and
+[diagnostic definitions](docs/benchmarks.md#confidence-diagnostics).
+
 ### Explain routing and inspect local health
 
 ```bash
